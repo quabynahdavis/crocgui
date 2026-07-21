@@ -158,6 +158,7 @@ pub fn send_file(
         relay: relay.clone(),
         curve: curve.clone(),
         error: None,
+        pinned: false,
     };
     history::add_record(&app, record);
 
@@ -194,6 +195,7 @@ pub fn receive_file(
         relay: relay.clone(),
         curve: curve.clone(),
         error: None,
+        pinned: false,
     };
     history::add_record(&app, record);
 

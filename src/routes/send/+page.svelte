@@ -92,7 +92,7 @@
   }
 </script>
 
-<div class="mx-auto max-w-lg p-4">
+<div class="mx-auto flex min-h-dvh max-w-lg flex-col justify-center p-4 pb-24 sm:pb-4">
   <a href="/" class="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground sm:mb-6 sm:min-h-0">
     <ArrowLeft class="h-5 w-5 sm:h-4 sm:w-4" />
     <span class="sm:text-sm">Back</span>

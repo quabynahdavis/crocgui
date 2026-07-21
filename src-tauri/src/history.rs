@@ -31,6 +31,8 @@ pub struct TransferRecord {
     pub relay: Option<String>,
     pub curve: Option<String>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,5 +132,44 @@ pub fn get_transfer_history(app: AppHandle) -> TransferHistory {
 #[tauri::command]
 pub fn clear_transfer_history(app: AppHandle) -> Result<(), String> {
     save_history(&app, &TransferHistory::new());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_record_pinned(app: AppHandle, id: String, pinned: bool) -> Result<(), String> {
+    let mut history = load_history(&app);
+    if let Some(record) = history.transfers.iter_mut().find(|r| r.id == id) {
+        record.pinned = pinned;
+        save_history(&app, &history);
+        Ok(())
+    } else {
+        Err("Record not found".into())
+    }
+}
+
+#[tauri::command]
+pub fn delete_transfer_record(app: AppHandle, id: String) -> Result<(), String> {
+    let mut history = load_history(&app);
+    let len = history.transfers.len();
+    history.transfers.retain(|r| r.id != id);
+    if history.transfers.len() < len {
+        save_history(&app, &history);
+        Ok(())
+    } else {
+        Err("Record not found".into())
+    }
+}
+
+#[tauri::command]
+pub fn delete_record_files(app: AppHandle, id: String) -> Result<(), String> {
+    let history = load_history(&app);
+    let record = history.transfers.iter().find(|r| r.id == id).ok_or("Record not found")?;
+    if !matches!(record.direction, TransferDirection::Send) {
+        return Err("Can only delete files for sent transfers".into());
+    }
+    for path in &record.files {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir_all(path);
+    }
     Ok(())
 }

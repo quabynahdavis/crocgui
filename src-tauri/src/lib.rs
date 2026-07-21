@@ -102,6 +102,9 @@ pub fn run() {
             config::save_settings,
             history::get_transfer_history,
             history::clear_transfer_history,
+            history::set_record_pinned,
+            history::delete_transfer_record,
+            history::delete_record_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
