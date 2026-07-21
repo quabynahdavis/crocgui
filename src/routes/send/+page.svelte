@@ -54,11 +54,17 @@
     }
   }
 
-  function loadSettings() {
-    const relay = localStorage.getItem("relay") || null;
-    const curve = localStorage.getItem("curve") || null;
-    const noCompress = localStorage.getItem("noCompress") === "true";
-    return { relay, curve, disableCompression: noCompress };
+  async function loadSettings() {
+    try {
+      const s: any = await invoke("get_settings");
+      return {
+        relay: s.relay || null,
+        curve: s.curve || null,
+        disableCompression: s.disable_compression || false,
+      };
+    } catch {
+      return { relay: null, curve: null, disableCompression: false };
+    }
   }
 
   async function handleSend() {
@@ -68,7 +74,7 @@
     code = "";
     progressLog = [];
     try {
-      await invoke("send_file", { path: filePath, ...loadSettings() });
+      await invoke("send_file", { path: filePath, ...(await loadSettings()) });
     } catch (e) {
       status = `error: ${e}`;
       transferring = false;

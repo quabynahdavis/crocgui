@@ -40,12 +40,18 @@
     unlisten.forEach((fn) => fn());
   });
 
-  function loadSettings() {
-    const relay = localStorage.getItem("relay") || null;
-    const curve = localStorage.getItem("curve") || null;
-    const noCompress = localStorage.getItem("noCompress") === "true";
-    const outputDir = localStorage.getItem("outputDir") || null;
-    return { relay, curve, disableCompression: noCompress, outputDir };
+  async function loadSettings() {
+    try {
+      const s: any = await invoke("get_settings");
+      return {
+        relay: s.relay || null,
+        curve: s.curve || null,
+        disableCompression: s.disable_compression || false,
+        outputDir: s.output_dir || null,
+      };
+    } catch {
+      return { relay: null, curve: null, disableCompression: false, outputDir: null };
+    }
   }
 
   async function handleReceive() {
@@ -54,7 +60,7 @@
     status = "starting";
     progressLog = [];
     try {
-      await invoke("receive_file", { code: code.trim(), ...loadSettings() });
+      await invoke("receive_file", { code: code.trim(), ...(await loadSettings()) });
     } catch (e) {
       status = `error: ${e}`;
       transferring = false;

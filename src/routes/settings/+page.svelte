@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import { ArrowLeft, Sun, Moon, Monitor, FolderOpen, Network, Shield, FileX } from "@lucide/svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
@@ -24,14 +25,20 @@
 
   const curves = ["p256", "p384", "p521", "siec", "ed25519"];
 
-  onMount(() => {
-    if (!browser) return;
-    const stored = localStorage.getItem("theme") as Theme | null;
-    theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-    relay = localStorage.getItem("relay") ?? "";
-    curve = localStorage.getItem("curve") ?? "p256";
-    disableCompression = localStorage.getItem("noCompress") === "true";
-    outputDir = localStorage.getItem("outputDir") ?? "";
+  onMount(async () => {
+    try {
+      const s: any = await invoke("get_settings");
+      theme = (s.theme as Theme) || "system";
+      relay = s.relay || "";
+      curve = s.curve || "p256";
+      disableCompression = s.disable_compression || false;
+      outputDir = s.output_dir || "";
+    } catch {
+      if (browser) {
+        const stored = localStorage.getItem("theme") as Theme | null;
+        theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+      }
+    }
   });
 
   function setTheme(t: Theme) {
@@ -39,14 +46,22 @@
     saveTheme(t);
   }
 
-  function saveAll() {
-    if (!browser) return;
-    localStorage.setItem("relay", relay);
-    localStorage.setItem("curve", curve);
-    localStorage.setItem("noCompress", disableCompression ? "true" : "false");
-    localStorage.setItem("outputDir", outputDir);
-    saved = true;
-    setTimeout(() => (saved = false), 2000);
+  async function saveAll() {
+    try {
+      await invoke("save_settings", {
+        settings: {
+          theme,
+          relay,
+          curve,
+          disable_compression: disableCompression,
+          output_dir: outputDir,
+        },
+      });
+      saved = true;
+      setTimeout(() => (saved = false), 2000);
+    } catch (e) {
+      console.error("Failed to save settings:", e);
+    }
   }
 
   async function pickDir() {
