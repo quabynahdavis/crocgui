@@ -10,6 +10,8 @@ pub struct Settings {
     pub disable_compression: bool,
     pub output_dir: String,
     pub theme: String,
+    pub autostart: bool,
+    pub minimize_to_tray: bool,
 }
 
 impl Default for Settings {
@@ -20,8 +22,20 @@ impl Default for Settings {
             disable_compression: false,
             output_dir: String::new(),
             theme: "system".into(),
+            autostart: false,
+            minimize_to_tray: true,
         }
     }
+}
+
+pub fn read_settings(app: &AppHandle) -> Settings {
+    let path = config_path(app);
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        if let Ok(settings) = serde_json::from_str(&data) {
+            return settings;
+        }
+    }
+    Settings::default()
 }
 
 fn config_path(app: &AppHandle) -> PathBuf {

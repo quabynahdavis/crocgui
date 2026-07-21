@@ -2,6 +2,7 @@ use std::io::BufRead;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 
 pub struct CrocState {
     pub pid: std::sync::Mutex<Option<u32>>,
@@ -97,9 +98,17 @@ fn spawn_and_monitor(
         match child.wait() {
             Ok(status) if status.success() => {
                 let _ = app.emit(complete_event, if code_event { code } else { String::new() });
+                let _ = app.notification().builder()
+                    .title("croc-gui")
+                    .body("Transfer complete!")
+                    .show();
             }
             _ => {
                 let _ = app.emit("croc-error", "Transfer failed or cancelled");
+                let _ = app.notification().builder()
+                    .title("croc-gui")
+                    .body("Transfer failed or was cancelled")
+                    .show();
             }
         }
     });

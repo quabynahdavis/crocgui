@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { ArrowLeft, Sun, Moon, Monitor, FolderOpen, Network, Shield, FileX } from "@lucide/svelte";
+  import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+  import { ArrowLeft, Sun, Moon, Monitor, FolderOpen, Network, Shield, FileX, LogIn, MinusCircle } from "@lucide/svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Input from "$lib/components/ui/input/input.svelte";
@@ -15,6 +16,8 @@
   let curve = $state("p256");
   let disableCompression = $state(false);
   let outputDir = $state("");
+  let autostart = $state(false);
+  let minimizeToTray = $state(true);
   let saved = $state(false);
 
   const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -33,11 +36,18 @@
       curve = s.curve || "p256";
       disableCompression = s.disable_compression || false;
       outputDir = s.output_dir || "";
+      autostart = s.autostart ?? false;
+      minimizeToTray = s.minimize_to_tray ?? true;
     } catch {
       if (browser) {
         const stored = localStorage.getItem("theme") as Theme | null;
         theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
       }
+    }
+    try {
+      autostart = await isEnabled();
+    } catch {
+      // autostart plugin not available
     }
   });
 
@@ -55,8 +65,19 @@
           curve,
           disable_compression: disableCompression,
           output_dir: outputDir,
+          autostart,
+          minimize_to_tray: minimizeToTray,
         },
       });
+      try {
+        if (autostart) {
+          await enable();
+        } else {
+          await disable();
+        }
+      } catch {
+        // autostart plugin may not be available on all platforms
+      }
       saved = true;
       setTimeout(() => (saved = false), 2000);
     } catch (e) {
@@ -199,6 +220,50 @@
         {saved ? "Saved!" : "Save Settings"}
       </Button>
     </div>
+
+    <Card>
+      <CardHeader>
+        <div class="flex items-center gap-2">
+          <LogIn class="h-5 w-5 text-muted-foreground" />
+          <div>
+            <CardTitle>Startup</CardTitle>
+            <CardDescription>Launch croc-gui when you log in</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <label class="flex cursor-pointer items-center gap-3">
+          <input
+            type="checkbox"
+            bind:checked={autostart}
+            class="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+          />
+          <span class="text-sm text-muted-foreground">Start automatically at login</span>
+        </label>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <div class="flex items-center gap-2">
+          <MinusCircle class="h-5 w-5 text-muted-foreground" />
+          <div>
+            <CardTitle>System Tray</CardTitle>
+            <CardDescription>Behavior when closing the window</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <label class="flex cursor-pointer items-center gap-3">
+          <input
+            type="checkbox"
+            bind:checked={minimizeToTray}
+            class="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+          />
+          <span class="text-sm text-muted-foreground">Minimize to tray instead of quitting</span>
+        </label>
+      </CardContent>
+    </Card>
 
     <Card>
       <CardHeader>
