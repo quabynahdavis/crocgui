@@ -9,25 +9,13 @@
   } from "@lucide/svelte";
   import { loadSettings } from "$lib/settings";
   import { readText } from "@tauri-apps/plugin-clipboard-manager";
+  import { sendState } from "$lib/stores/send-state.svelte";
+  import type { SendMode, SendItem } from "$lib/stores/send-state.svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Progress from "$lib/components/ui/progress/progress.svelte";
 
-  type SendMode = "file" | "folder" | "text" | "clipboard";
-
-  interface SendItem {
-    type: SendMode;
-    path: string;
-    label: string;
-    preview?: string;
-  }
-
-  let mode = $state<SendMode>("file");
-  let items = $state<SendItem[]>([]);
-  let textInput = $state("");
   let previewTarget = $state<SendItem | null>(null);
-  let clipboardPasted = $state(false);
-  let clipboardContent = $state("");
 
   let transferring = $state(false);
   let code = $state("");
@@ -79,7 +67,7 @@
     if (result) {
       const newFiles = typeof result === "string" ? [result] : result;
       for (const f of newFiles) {
-        items = [...items, { type: "file" as SendMode, path: f, label: labelFromPath(f) }];
+        sendState.items = [...sendState.items, { type: "file" as SendMode, path: f, label: labelFromPath(f) }];
       }
     }
   }
@@ -87,34 +75,34 @@
   async function pickFolder() {
     const result = await open({ directory: true, multiple: false });
     if (result) {
-      items = [...items, { type: "folder" as SendMode, path: result, label: labelFromPath(result) }];
+      sendState.items = [...sendState.items, { type: "folder" as SendMode, path: result, label: labelFromPath(result) }];
     }
   }
 
   function addText() {
-    const trimmed = textInput.trim();
+    const trimmed = sendState.textInput.trim();
     if (!trimmed) return;
     const ts = Date.now();
     const label = `note-${ts}.txt`;
-    items = [...items, { type: "text", path: "", label, preview: trimmed }];
-    textInput = "";
+    sendState.items = [...sendState.items, { type: "text", path: "", label, preview: trimmed }];
+    sendState.textInput = "";
   }
 
   async function pasteClipboard() {
     try {
       const text = await readText();
       if (!text.trim()) return;
-      clipboardContent = text;
-      clipboardPasted = true;
+      sendState.clipboardContent = text;
+      sendState.clipboardPasted = true;
       const preview = text.slice(0, 500);
-      items = [...items, { type: "clipboard", path: "", label: "Clipboard paste", preview }];
+      sendState.items = [...sendState.items, { type: "clipboard", path: "", label: "Clipboard paste", preview }];
     } catch (e) {
       console.error("Clipboard read failed:", e);
     }
   }
 
   function removeItem(idx: number) {
-    items = items.filter((_, i) => i !== idx);
+    sendState.items = sendState.items.filter((_, i) => i !== idx);
   }
 
   function openPreview(item: SendItem) {
@@ -133,21 +121,21 @@
   }
 
   async function handleSend() {
-    if (items.length === 0 || transferring) return;
+    if (sendState.items.length === 0 || transferring) return;
 
     // Resolve temp paths for text/clipboard items
     const paths: string[] = [];
-    for (const item of items) {
+    for (const item of sendState.items) {
       if (item.type === "text" && item.preview) {
         const saved = await invoke<string>("save_temp_text", {
           filename: item.label,
           content: item.preview,
         });
         paths.push(saved);
-      } else if (item.type === "clipboard" && clipboardContent) {
+      } else if (item.type === "clipboard" && sendState.clipboardContent) {
         const saved = await invoke<string>("save_temp_text", {
           filename: `clipboard-${Date.now()}.txt`,
-          content: clipboardContent,
+          content: sendState.clipboardContent,
         });
         paths.push(saved);
       } else {
@@ -208,8 +196,8 @@
         <div class="flex gap-1 rounded-lg bg-muted p-1">
           {#each modes as { value, label, icon: Icon }}
             <button
-              onclick={() => (mode = value)}
-              class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm {mode === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+              onclick={() => (sendState.mode = value)}
+              class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm {sendState.mode === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
             >
               <Icon class="h-4 w-4" />
               <span class="hidden sm:inline">{label}</span>
@@ -218,49 +206,49 @@
         </div>
 
         <!-- Mode input -->
-        {#if mode === "file"}
+        {#if sendState.mode === "file"}
           <Button variant="outline" class="w-full" onclick={pickFiles}>
             <Upload class="h-4 w-4" />
-            {items.filter((i) => i.type === "file").length > 0 ? "Add More Files" : "Choose Files"}
+            {sendState.items.filter((i) => i.type === "file").length > 0 ? "Add More Files" : "Choose Files"}
           </Button>
         {/if}
 
-        {#if mode === "folder"}
+        {#if sendState.mode === "folder"}
           <Button variant="outline" class="w-full" onclick={pickFolder}>
             <Folder class="h-4 w-4" />
-            {items.filter((i) => i.type === "folder").length > 0 ? "Choose Another Folder" : "Choose Folder"}
+            {sendState.items.filter((i) => i.type === "folder").length > 0 ? "Choose Another Folder" : "Choose Folder"}
           </Button>
         {/if}
 
-        {#if mode === "text"}
+        {#if sendState.mode === "text"}
           <textarea
-            bind:value={textInput}
+            bind:value={sendState.textInput}
             placeholder="Type or paste your text here…"
             rows="5"
             class="w-full resize-none rounded-lg border border-input bg-background p-3 text-sm outline-ring focus:border-primary"
           ></textarea>
-          <Button variant="outline" class="w-full" onclick={addText} disabled={!textInput.trim()}>
+          <Button variant="outline" class="w-full" onclick={addText} disabled={!sendState.textInput.trim()}>
             <StickyNote class="h-4 w-4" />
             Add as note.txt
           </Button>
         {/if}
 
-        {#if mode === "clipboard"}
-          {#if clipboardPasted}
+        {#if sendState.mode === "clipboard"}
+          {#if sendState.clipboardPasted}
             <div class="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
               Clipboard content added to list.
             </div>
           {/if}
           <Button variant="outline" class="w-full" onclick={pasteClipboard}>
             <ClipboardList class="h-4 w-4" />
-            {clipboardPasted ? "Paste Again" : "Paste from Clipboard"}
+            {sendState.clipboardPasted ? "Paste Again" : "Paste from Clipboard"}
           </Button>
         {/if}
 
         <!-- Items list -->
-        {#if items.length > 0}
+        {#if sendState.items.length > 0}
           <div class="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
-            {#each items as item, i}
+            {#each sendState.items as item, i}
               <div class="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
                 {#if item.type === "text"}
                   <StickyNote class="h-4 w-4 shrink-0 text-amber-500" />
@@ -291,9 +279,9 @@
               </div>
             {/each}
           </div>
-          <p class="text-xs text-muted-foreground">{items.length} item(s) selected</p>
+          <p class="text-xs text-muted-foreground">{sendState.items.length} item(s) selected</p>
           <Button class="w-full" onclick={handleSend} disabled={transferring}>
-            Send {items.length > 1 ? "Items" : "Item"}
+            Send {sendState.items.length > 1 ? "Items" : "Item"}
           </Button>
         {/if}
       {/if}
@@ -302,15 +290,12 @@
         <div class="rounded-lg border bg-muted/50 p-4 text-center">
           <p class="mb-2 text-sm text-muted-foreground">Share this code with the recipient:</p>
           <div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <code
+            <button
               class="w-full break-all rounded bg-primary/10 px-4 py-3 text-lg font-bold tracking-wider text-primary sm:select-all sm:w-auto"
-              role="button"
-              tabindex="0"
               onclick={copyCode}
-              onkeydown={(e) => e.key === "Enter" && copyCode()}
             >
               {code}
-            </code>
+            </button>
             <Button size="icon" variant="ghost" onclick={copyCode} title="Copy code">
               {#if copied}
                 <Check class="h-4 w-4 text-green-500" />
@@ -336,7 +321,7 @@
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           Transfer complete!
         </div>
-        <Button variant="outline" class="w-full" onclick={() => { status = ""; items = []; code = ""; progressLog = []; textInput = ""; clipboardPasted = false; clipboardContent = ""; }}>
+        <Button variant="outline" class="w-full" onclick={() => { status = ""; code = ""; progressLog = []; sendState.reset(); }}>
           Send Another Item
         </Button>
       {/if}
@@ -373,6 +358,7 @@
     <div
       class="flex max-h-[70vh] w-full flex-col rounded-t-xl bg-background p-6 shadow-lg sm:max-w-md sm:rounded-xl"
       onclick={(e) => e.stopPropagation()}
+      role="presentation"
     >
       <div class="mb-3 flex items-center justify-between">
         <h3 class="text-lg font-semibold">{previewTarget.label}</h3>

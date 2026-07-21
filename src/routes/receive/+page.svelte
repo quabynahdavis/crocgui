@@ -5,14 +5,13 @@
   import { page } from "$app/stores";
   import { ArrowLeft, Download, LoaderCircle, FolderOpen } from "@lucide/svelte";
   import { loadSettings } from "$lib/settings";
+  import { receiveState } from "$lib/stores/receive-state.svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Input from "$lib/components/ui/input/input.svelte";
   import Label from "$lib/components/ui/label/label.svelte";
   import Progress from "$lib/components/ui/progress/progress.svelte";
 
-  let code = $state("");
-  let outputDir = $state("");
   let transferring = $state(false);
   let status = $state("");
   let progressLog = $state<string[]>([]);
@@ -21,10 +20,12 @@
 
   onMount(async () => {
     const urlCode = $page.url.searchParams.get("code");
-    if (urlCode) {
-      code = urlCode;
+    if (urlCode && !receiveState.code) {
+      receiveState.code = urlCode;
     }
-    outputDir = (await loadSettings()).outputDir || "";
+    if (!receiveState.outputDir) {
+      receiveState.outputDir = (await loadSettings()).outputDir || "";
+    }
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
         progressLog = [...progressLog, e.payload];
@@ -49,15 +50,15 @@
   });
 
   async function handleReceive() {
-    if (!code.trim() || transferring) return;
+    if (!receiveState.code.trim() || transferring) return;
     transferring = true;
     status = "starting";
     progressLog = [];
     try {
       await invoke("receive_file", {
-        code: code.trim(),
+        code: receiveState.code.trim(),
         ...(await loadSettings()),
-        outputDir: outputDir || null,
+        outputDir: receiveState.outputDir || null,
       });
     } catch (e) {
       status = `error: ${e}`;
@@ -69,7 +70,7 @@
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const dir = await open({ directory: true, multiple: false });
-      if (dir) outputDir = dir;
+      if (dir) receiveState.outputDir = dir;
     } catch {
       // not in Tauri
     }
@@ -100,7 +101,7 @@
           <Label for="code">Code Phrase</Label>
           <Input
             id="code"
-            bind:value={code}
+            bind:value={receiveState.code}
             placeholder="e.g. 1234-ABCD-5678-EFGH"
             disabled={transferring}
             class="h-11 sm:h-9"
@@ -111,7 +112,7 @@
           <div class="flex gap-2">
             <Input
               id="output-dir"
-              bind:value={outputDir}
+              bind:value={receiveState.outputDir}
               placeholder="Current directory (default)"
               disabled={transferring}
               class="h-11 flex-1 sm:h-9"
@@ -121,7 +122,7 @@
             </Button>
           </div>
         </div>
-        <Button class="w-full" onclick={handleReceive} disabled={transferring || !code.trim()}>
+        <Button class="w-full" onclick={handleReceive} disabled={transferring || !receiveState.code.trim()}>
           <Download class="h-4 w-4" />
           Receive Files
         </Button>
@@ -138,7 +139,7 @@
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           Transfer complete! Files have been saved.
         </div>
-        <Button variant="outline" class="w-full" onclick={() => { status = ""; code = ""; progressLog = []; }}>
+        <Button variant="outline" class="w-full" onclick={() => { status = ""; receiveState.code = ""; progressLog = []; }}>
           Receive Another File
         </Button>
       {/if}
