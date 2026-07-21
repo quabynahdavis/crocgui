@@ -54,6 +54,13 @@
     }
   }
 
+  function loadSettings() {
+    const relay = localStorage.getItem("relay") || null;
+    const curve = localStorage.getItem("curve") || null;
+    const noCompress = localStorage.getItem("noCompress") === "true";
+    return { relay, curve, disableCompression: noCompress };
+  }
+
   async function handleSend() {
     if (!filePath || transferring) return;
     transferring = true;
@@ -61,7 +68,7 @@
     code = "";
     progressLog = [];
     try {
-      await invoke("send_file", { path: filePath });
+      await invoke("send_file", { path: filePath, ...loadSettings() });
     } catch (e) {
       status = `error: ${e}`;
       transferring = false;

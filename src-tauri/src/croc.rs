@@ -33,17 +33,38 @@ fn croc_binary(app: &AppHandle) -> PathBuf {
     PathBuf::from(binary_name)
 }
 
-#[tauri::command]
-pub fn send_file(app: AppHandle, path: String) -> Result<(), String> {
-    let binary = croc_binary(&app);
+fn build_base_args(
+    relay: Option<&str>,
+    curve: Option<&str>,
+    disable_compression: bool,
+) -> Vec<String> {
+    let mut args = vec!["--yes".to_string()];
+    if let Some(r) = relay {
+        if !r.is_empty() {
+            args.push("--relay".to_string());
+            args.push(r.to_string());
+        }
+    }
+    if let Some(c) = curve {
+        if !c.is_empty() {
+            args.push("--curve".to_string());
+            args.push(c.to_string());
+        }
+    }
+    if disable_compression {
+        args.push("--no-compress".to_string());
+    }
+    args
+}
 
+fn spawn_and_monitor(
+    app: AppHandle,
+    mut cmd: Command,
+    complete_event: &'static str,
+    code_event: bool,
+) {
     std::thread::spawn(move || {
-        let mut child = match Command::new(&binary)
-            .args(["--yes", "send", &path])
-            .stderr(Stdio::piped())
-            .stdout(Stdio::null())
-            .spawn()
-        {
+        let mut child = match cmd.stderr(Stdio::piped()).stdout(Stdio::null()).spawn() {
             Ok(c) => c,
             Err(e) => {
                 let _ = app.emit("croc-error", format!("Failed to start croc: {}", e));
@@ -63,7 +84,7 @@ pub fn send_file(app: AppHandle, path: String) -> Result<(), String> {
                 Err(_) => continue,
             };
             let _ = app.emit("croc-progress", &line);
-            if (line.contains("Code is:") || line.contains("code is:")) && code.is_empty() {
+            if code_event && (line.contains("Code is:") || line.contains("code is:")) && code.is_empty() {
                 if let Some(c) = line.split(':').nth(1) {
                     code = c.trim().to_string();
                     let _ = app.emit("croc-code", &code);
@@ -75,61 +96,58 @@ pub fn send_file(app: AppHandle, path: String) -> Result<(), String> {
 
         match child.wait() {
             Ok(status) if status.success() => {
-                let _ = app.emit("croc-complete", code);
+                let _ = app.emit(complete_event, if code_event { code } else { String::new() });
             }
             _ => {
                 let _ = app.emit("croc-error", "Transfer failed or cancelled");
             }
         }
     });
+}
 
+#[tauri::command]
+pub fn send_file(
+    app: AppHandle,
+    path: String,
+    relay: Option<String>,
+    curve: Option<String>,
+    disable_compression: Option<bool>,
+) -> Result<(), String> {
+    let binary = croc_binary(&app);
+    let mut args = build_base_args(relay.as_deref(), curve.as_deref(), disable_compression.unwrap_or(false));
+    args.push("send".to_string());
+    args.push(path);
+
+    let mut cmd = Command::new(&binary);
+    cmd.args(&args);
+
+    spawn_and_monitor(app, cmd, "croc-complete", true);
     Ok(())
 }
 
 #[tauri::command]
-pub fn receive_file(app: AppHandle, code: String) -> Result<(), String> {
+pub fn receive_file(
+    app: AppHandle,
+    code: String,
+    output_dir: Option<String>,
+    relay: Option<String>,
+    curve: Option<String>,
+    disable_compression: Option<bool>,
+) -> Result<(), String> {
     let binary = croc_binary(&app);
+    let args = build_base_args(relay.as_deref(), curve.as_deref(), disable_compression.unwrap_or(false));
 
-    std::thread::spawn(move || {
-        let mut child = match Command::new(&binary)
-            .args(["--yes"])
-            .env("CROC_SECRET", &code)
-            .stderr(Stdio::piped())
-            .stdout(Stdio::null())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = app.emit("croc-error", format!("Failed to start croc: {}", e));
-                return;
-            }
-        };
+    let mut cmd = Command::new(&binary);
+    cmd.args(&args);
+    cmd.env("CROC_SECRET", &code);
 
-        *app.state::<CrocState>().pid.lock().unwrap() = Some(child.id());
-
-        let stderr = child.stderr.take().unwrap();
-        let reader = std::io::BufReader::new(stderr);
-
-        for line in reader.lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(_) => continue,
-            };
-            let _ = app.emit("croc-progress", &line);
+    if let Some(dir) = output_dir {
+        if !dir.is_empty() {
+            cmd.current_dir(&dir);
         }
+    }
 
-        *app.state::<CrocState>().pid.lock().unwrap() = None;
-
-        match child.wait() {
-            Ok(status) if status.success() => {
-                let _ = app.emit("croc-receive-complete", "Transfer complete");
-            }
-            _ => {
-                let _ = app.emit("croc-error", "Receive failed or cancelled");
-            }
-        }
-    });
-
+    spawn_and_monitor(app, cmd, "croc-receive-complete", false);
     Ok(())
 }
 

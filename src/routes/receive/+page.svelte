@@ -40,13 +40,21 @@
     unlisten.forEach((fn) => fn());
   });
 
+  function loadSettings() {
+    const relay = localStorage.getItem("relay") || null;
+    const curve = localStorage.getItem("curve") || null;
+    const noCompress = localStorage.getItem("noCompress") === "true";
+    const outputDir = localStorage.getItem("outputDir") || null;
+    return { relay, curve, disableCompression: noCompress, outputDir };
+  }
+
   async function handleReceive() {
     if (!code.trim() || transferring) return;
     transferring = true;
     status = "starting";
     progressLog = [];
     try {
-      await invoke("receive_file", { code: code.trim() });
+      await invoke("receive_file", { code: code.trim(), ...loadSettings() });
     } catch (e) {
       status = `error: ${e}`;
       transferring = false;
