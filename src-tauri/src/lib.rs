@@ -21,12 +21,18 @@ pub fn run() {
             use tauri::menu::{MenuBuilder, MenuItemBuilder};
             use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
-            let show = MenuItemBuilder::with_id("show", "Show Window")
-                .build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit croc-gui")
-                .build(app)?;
+            let show = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
+            let send = MenuItemBuilder::with_id("send", "Send Files").build(app)?;
+            let receive = MenuItemBuilder::with_id("receive", "Receive Files").build(app)?;
+            let settings = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit croc-gui").build(app)?;
             let menu = MenuBuilder::new(app)
                 .item(&show)
+                .separator()
+                .item(&send)
+                .item(&receive)
+                .separator()
+                .item(&settings)
                 .separator()
                 .item(&quit)
                 .build()?;
@@ -40,6 +46,13 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    route @ ("send" | "receive" | "settings") => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.eval(&format!("window.location.href = '/{route}'"));
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
