@@ -5,6 +5,7 @@
     ArrowLeft, Send, Download, Check, X, Clock, LoaderCircle,
     Trash2, Ban, Pin, PinOff,
   } from "@lucide/svelte";
+  import { Tabs, TabsList, TabsTrigger, TabsContent } from "$lib/components/ui/tabs/index.js";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent } from "$lib/components/ui/card/index.js";
 
@@ -149,18 +150,24 @@
       No transfers yet.
     </div>
   {:else}
-    {#if sent.length > 0}
-      <div class="mb-6">
-        <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+    <Tabs value="sent">
+      <TabsList class="w-full">
+        <TabsTrigger value="sent" class="flex-1 gap-1.5">
           <Send class="h-4 w-4" />
           Sent
-          <span class="ml-auto text-xs">{sent.length}</span>
-        </h2>
-        <div class="space-y-2">
-          {#each sent as tx (tx.id)}
-            <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
-              <CardContent class="flex items-start gap-3 p-3">
-                <div class="mt-0.5 shrink-0">
+          <span class="ml-auto text-xs tabular-nums opacity-60">{sent.length}</span>
+        </TabsTrigger>
+        <TabsTrigger value="received" class="flex-1 gap-1.5">
+          <Download class="h-4 w-4" />
+          Received
+          <span class="ml-auto text-xs tabular-nums opacity-60">{received.length}</span>
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="sent" class="space-y-2">
+        {#each sent as tx (tx.id)}
+          <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
+            <CardContent class="flex items-start gap-3 p-3">
+              <div class="mt-0.5 shrink-0">
                   {#if tx.status === "in_progress"}
                     <LoaderCircle class="h-5 w-5 animate-spin text-blue-500" />
                   {:else}
@@ -233,19 +240,9 @@
               </CardContent>
             </Card>
           {/each}
-        </div>
-      </div>
-    {/if}
-
-    {#if received.length > 0}
-      <div>
-        <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          <Download class="h-4 w-4" />
-          Received
-          <span class="ml-auto text-xs">{received.length}</span>
-        </h2>
-        <div class="space-y-2">
-          {#each received as tx (tx.id)}
+      </TabsContent>
+      <TabsContent value="received" class="space-y-2">
+        {#each received as tx (tx.id)}
             <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
               <CardContent class="flex items-start gap-3 p-3">
                 <div class="mt-0.5 shrink-0">
@@ -316,9 +313,8 @@
               </CardContent>
             </Card>
           {/each}
-        </div>
-      </div>
-    {/if}
+      </TabsContent>
+    </Tabs>
   {/if}
 </div>
 
