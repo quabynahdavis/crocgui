@@ -8,6 +8,7 @@
     "opener:default",
     "dialog:default",
     "notification:default",
-    "autostart:default"
+    "autostart:default",
+    "clipboard-manager:allow-read-text"
   ]
 }

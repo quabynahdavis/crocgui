@@ -8,6 +8,7 @@
     ClipboardList, StickyNote, Eye,
   } from "@lucide/svelte";
   import { loadSettings } from "$lib/settings";
+  import { readText } from "@tauri-apps/plugin-clipboard-manager";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Progress from "$lib/components/ui/progress/progress.svelte";
@@ -101,14 +102,14 @@
 
   async function pasteClipboard() {
     try {
-      const text = await navigator.clipboard.readText();
+      const text = await readText();
       if (!text.trim()) return;
       clipboardContent = text;
       clipboardPasted = true;
       const preview = text.slice(0, 500);
       items = [...items, { type: "clipboard", path: "", label: "Clipboard paste", preview }];
-    } catch {
-      // permission denied or no clipboard access
+    } catch (e) {
+      console.error("Clipboard read failed:", e);
     }
   }
 
