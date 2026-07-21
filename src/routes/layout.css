@@ -135,6 +135,9 @@
 	html {
 		-webkit-tap-highlight-color: transparent;
 	}
+	body {
+		overscroll-behavior: contain;
+	}
 	button, a, input, select, textarea {
 		touch-action: manipulation;
 	}
