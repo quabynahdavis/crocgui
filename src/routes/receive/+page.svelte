@@ -12,9 +12,7 @@
   import Label from "$lib/components/ui/label/label.svelte";
   import Progress from "$lib/components/ui/progress/progress.svelte";
 
-  let transferring = $state(false);
-  let status = $state("");
-  let progressLog = $state<string[]>([]);
+
 
   let unlisten: (() => void)[] = [];
 
@@ -28,19 +26,19 @@
     }
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
-        progressLog = [...progressLog, e.payload];
+        receiveState.progressLog = [...receiveState.progressLog, e.payload];
       }),
     );
     unlisten.push(
       await listen<string>("croc-receive-complete", () => {
-        status = "complete";
-        transferring = false;
+        receiveState.status = "complete";
+        receiveState.transferring = false;
       }),
     );
     unlisten.push(
       await listen<string>("croc-error", (e) => {
-        status = `error: ${e.payload}`;
-        transferring = false;
+        receiveState.status = `error: ${e.payload}`;
+        receiveState.transferring = false;
       }),
     );
   });
@@ -50,10 +48,10 @@
   });
 
   async function handleReceive() {
-    if (!receiveState.code.trim() || transferring) return;
-    transferring = true;
-    status = "starting";
-    progressLog = [];
+    if (!receiveState.code.trim() || receiveState.transferring) return;
+    receiveState.transferring = true;
+    receiveState.status = "starting";
+    receiveState.progressLog = [];
     try {
       await invoke("receive_file", {
         code: receiveState.code.trim(),
@@ -61,8 +59,8 @@
         outputDir: receiveState.outputDir || null,
       });
     } catch (e) {
-      status = `error: ${e}`;
-      transferring = false;
+      receiveState.status = `error: ${e}`;
+      receiveState.transferring = false;
     }
   }
 
@@ -78,8 +76,8 @@
 
   function cancel() {
     invoke("cancel_transfer");
-    transferring = false;
-    status = "cancelled";
+    receiveState.transferring = false;
+    receiveState.status = "cancelled";
   }
 </script>
 
@@ -96,14 +94,14 @@
       <CardDescription>Enter the code phrase from the sender to receive their file</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      {#if !transferring && status !== "complete"}
+      {#if !receiveState.transferring && receiveState.status !== "complete"}
         <div class="space-y-2">
           <Label for="code">Code Phrase</Label>
           <Input
             id="code"
             bind:value={receiveState.code}
             placeholder="e.g. 1234-ABCD-5678-EFGH"
-            disabled={transferring}
+            disabled={receiveState.transferring}
             class="h-11 sm:h-9"
           />
         </div>
@@ -114,47 +112,47 @@
               id="output-dir"
               bind:value={receiveState.outputDir}
               placeholder="Current directory (default)"
-              disabled={transferring}
+              disabled={receiveState.transferring}
               class="h-11 flex-1 sm:h-9"
             />
-            <Button variant="outline" size="icon" onclick={pickDir} disabled={transferring} class="h-11 w-11 shrink-0 sm:h-9 sm:w-9" title="Browse">
+            <Button variant="outline" size="icon" onclick={pickDir} disabled={receiveState.transferring} class="h-11 w-11 shrink-0 sm:h-9 sm:w-9" title="Browse">
               <FolderOpen class="h-4 w-4" />
             </Button>
           </div>
         </div>
-        <Button class="w-full" onclick={handleReceive} disabled={transferring || !receiveState.code.trim()}>
+        <Button class="w-full" onclick={handleReceive} disabled={receiveState.transferring || !receiveState.code.trim()}>
           <Download class="h-4 w-4" />
           Receive Files
         </Button>
       {/if}
 
-      {#if transferring}
+      {#if receiveState.transferring}
         <Progress class="w-full" />
         <Button variant="destructive" class="w-full" onclick={cancel}>
           Cancel
         </Button>
       {/if}
 
-      {#if status === "complete"}
+      {#if receiveState.status === "complete"}
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           Transfer complete! Files have been saved.
         </div>
-        <Button variant="outline" class="w-full" onclick={() => { status = ""; receiveState.code = ""; progressLog = []; }}>
+        <Button variant="outline" class="w-full" onclick={() => { receiveState.status = ""; receiveState.code = ""; receiveState.progressLog = []; }}>
           Receive Another File
         </Button>
       {/if}
 
-      {#if status && status !== "complete" && !transferring && status !== "starting"}
+      {#if receiveState.status && receiveState.status !== "complete" && !receiveState.transferring && receiveState.status !== "starting"}
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
-          {status}
+          {receiveState.status}
         </div>
       {/if}
 
-      {#if progressLog.length > 0}
+      {#if receiveState.progressLog.length > 0}
         <details class="text-xs text-muted-foreground">
           <summary class="cursor-pointer">Progress log</summary>
           <pre class="mt-2 max-h-40 overflow-auto rounded bg-muted p-2">
-{#each progressLog.slice(-20) as line}
+{#each receiveState.progressLog.slice(-20) as line}
 {line.trim()}
 {/each}</pre>
         </details>

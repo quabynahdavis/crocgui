@@ -14,11 +14,20 @@ class SendState {
   clipboardPasted = $state(false);
   clipboardContent = $state("");
 
+  transferring = $state(false);
+  code = $state("");
+  status = $state("");
+  progressLog = $state<string[]>([]);
+
   reset() {
     this.items = [];
     this.textInput = "";
     this.clipboardPasted = false;
     this.clipboardContent = "";
+    this.transferring = false;
+    this.code = "";
+    this.status = "";
+    this.progressLog = [];
   }
 }
 

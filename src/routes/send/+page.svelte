@@ -17,10 +17,6 @@
 
   let previewTarget = $state<SendItem | null>(null);
 
-  let transferring = $state(false);
-  let code = $state("");
-  let status = $state("");
-  let progressLog = $state<string[]>([]);
   let copied = $state(false);
 
   let unlisten: (() => void)[] = [];
@@ -28,25 +24,25 @@
   onMount(async () => {
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
-        progressLog = [...progressLog, e.payload];
+        sendState.progressLog = [...sendState.progressLog, e.payload];
       }),
     );
     unlisten.push(
       await listen<string>("croc-code", (e) => {
-        code = e.payload;
+        sendState.code = e.payload;
       }),
     );
     unlisten.push(
       await listen<string>("croc-complete", (e) => {
-        code = e.payload || code;
-        status = "complete";
-        transferring = false;
+        sendState.code = e.payload || sendState.code;
+        sendState.status = "complete";
+        sendState.transferring = false;
       }),
     );
     unlisten.push(
       await listen<string>("croc-error", (e) => {
-        status = `error: ${e.payload}`;
-        transferring = false;
+        sendState.status = `error: ${e.payload}`;
+        sendState.transferring = false;
       }),
     );
   });
@@ -121,7 +117,7 @@
   }
 
   async function handleSend() {
-    if (sendState.items.length === 0 || transferring) return;
+    if (sendState.items.length === 0 || sendState.transferring) return;
 
     // Resolve temp paths for text/clipboard items
     const paths: string[] = [];
@@ -143,22 +139,22 @@
       }
     }
 
-    transferring = true;
-    status = "starting";
-    code = "";
-    progressLog = [];
+    sendState.transferring = true;
+    sendState.status = "starting";
+    sendState.code = "";
+    sendState.progressLog = [];
     try {
       await invoke("send_file", { paths, ...(await loadSettings()) });
     } catch (e) {
-      status = `error: ${e}`;
-      transferring = false;
+      sendState.status = `error: ${e}`;
+      sendState.transferring = false;
     }
   }
 
   async function copyCode() {
-    if (!code) return;
+    if (!sendState.code) return;
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(sendState.code);
       copied = true;
       setTimeout(() => (copied = false), 2000);
     } catch {
@@ -168,8 +164,8 @@
 
   function cancel() {
     invoke("cancel_transfer");
-    transferring = false;
-    status = "cancelled";
+    sendState.transferring = false;
+    sendState.status = "cancelled";
   }
 
   function labelFromPath(p: string) {
@@ -191,7 +187,7 @@
       <CardDescription>Select files, a folder, or share text</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      {#if !transferring && status !== "complete"}
+      {#if !sendState.transferring && sendState.status !== "complete"}
         <!-- Mode selector -->
         <div class="flex gap-1 rounded-lg bg-muted p-1">
           {#each modes as { value, label, icon: Icon }}
@@ -280,13 +276,13 @@
             {/each}
           </div>
           <p class="text-xs text-muted-foreground">{sendState.items.length} item(s) selected</p>
-          <Button class="w-full" onclick={handleSend} disabled={transferring}>
+          <Button class="w-full" onclick={handleSend} disabled={sendState.transferring}>
             Send {sendState.items.length > 1 ? "Items" : "Item"}
           </Button>
         {/if}
       {/if}
 
-      {#if code}
+      {#if sendState.code}
         <div class="rounded-lg border bg-muted/50 p-4 text-center">
           <p class="mb-2 text-sm text-muted-foreground">Share this code with the recipient:</p>
           <div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
@@ -294,7 +290,7 @@
               class="w-full break-all rounded bg-primary/10 px-4 py-3 text-lg font-bold tracking-wider text-primary sm:select-all sm:w-auto"
               onclick={copyCode}
             >
-              {code}
+              {sendState.code}
             </button>
             <Button size="icon" variant="ghost" onclick={copyCode} title="Copy code">
               {#if copied}
@@ -310,33 +306,33 @@
         </div>
       {/if}
 
-      {#if transferring}
+      {#if sendState.transferring}
         <Progress class="w-full" />
         <Button variant="destructive" class="w-full" onclick={cancel}>
           Cancel
         </Button>
       {/if}
 
-      {#if status === "complete"}
+      {#if sendState.status === "complete"}
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           Transfer complete!
         </div>
-        <Button variant="outline" class="w-full" onclick={() => { status = ""; code = ""; progressLog = []; sendState.reset(); }}>
+        <Button variant="outline" class="w-full" onclick={() => { sendState.reset(); }}>
           Send Another Item
         </Button>
       {/if}
 
-      {#if status && status !== "complete" && !transferring && status !== "starting"}
+      {#if sendState.status && sendState.status !== "complete" && !sendState.transferring && sendState.status !== "starting"}
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
-          {status}
+          {sendState.status}
         </div>
       {/if}
 
-      {#if progressLog.length > 0}
+      {#if sendState.progressLog.length > 0}
         <details class="text-xs text-muted-foreground">
           <summary class="cursor-pointer">Progress log</summary>
           <pre class="mt-2 max-h-40 overflow-auto rounded bg-muted p-2">
-{#each progressLog.slice(-20) as line}
+{#each sendState.progressLog.slice(-20) as line}
 {line.trim()}
 {/each}</pre>
         </details>
