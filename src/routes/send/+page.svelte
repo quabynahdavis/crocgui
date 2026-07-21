@@ -20,8 +20,11 @@
   let copied = $state(false);
 
   let unlisten: (() => void)[] = [];
+  let listenersRegistered = false;
 
   onMount(async () => {
+    if (listenersRegistered) return;
+    listenersRegistered = true;
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
         sendState.progressLog = [...sendState.progressLog, e.payload];
@@ -158,7 +161,7 @@
       copied = true;
       setTimeout(() => (copied = false), 2000);
     } catch {
-      // fallback
+      console.warn("clipboard write failed");
     }
   }
 

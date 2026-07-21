@@ -9,7 +9,15 @@ export interface CrocSettings {
 
 export async function loadSettings(): Promise<CrocSettings> {
   try {
-    const s: any = await invoke("get_settings");
+    const s = await invoke<{
+      relay: string;
+      curve: string;
+      disable_compression: boolean;
+      output_dir: string;
+      theme: string;
+      autostart: boolean;
+      minimize_to_tray: boolean;
+    }>("get_settings");
     return {
       relay: s.relay || null,
       curve: s.curve || null,

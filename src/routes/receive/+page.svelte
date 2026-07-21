@@ -15,8 +15,11 @@
 
 
   let unlisten: (() => void)[] = [];
+  let listenersRegistered = false;
 
   onMount(async () => {
+    if (listenersRegistered) return;
+    listenersRegistered = true;
     const urlCode = $page.url.searchParams.get("code");
     if (urlCode && !receiveState.code) {
       receiveState.code = urlCode;
@@ -70,7 +73,7 @@
       const dir = await open({ directory: true, multiple: false });
       if (dir) receiveState.outputDir = dir;
     } catch {
-      // not in Tauri
+      console.warn("pickDir failed (not in Tauri)");
     }
   }
 

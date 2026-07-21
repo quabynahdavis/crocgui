@@ -30,7 +30,15 @@
 
   onMount(async () => {
     try {
-      const s: any = await invoke("get_settings");
+      const s = await invoke<{
+        relay: string;
+        curve: string;
+        disable_compression: boolean;
+        output_dir: string;
+        theme: string;
+        autostart: boolean;
+        minimize_to_tray: boolean;
+      }>("get_settings");
       theme = (s.theme as Theme) || "system";
       relay = s.relay || "";
       curve = s.curve || "p256";
@@ -47,7 +55,7 @@
     try {
       autostart = await isEnabled();
     } catch {
-      // autostart plugin not available
+      console.warn("autostart plugin not available");
     }
   });
 
@@ -76,7 +84,7 @@
           await disable();
         }
       } catch {
-        // autostart plugin may not be available on all platforms
+        console.warn("autostart plugin not available on this platform");
       }
       saved = true;
       setTimeout(() => (saved = false), 2000);
@@ -92,7 +100,7 @@
       const dir = await open({ directory: true, multiple: false });
       if (dir) outputDir = dir;
     } catch {
-      // Tauri dialog not available
+      console.warn("Tauri dialog not available");
     }
   }
 </script>

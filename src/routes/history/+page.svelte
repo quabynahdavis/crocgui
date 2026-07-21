@@ -36,10 +36,10 @@
 
   async function loadHistory() {
     try {
-      const h: any = await invoke("get_transfer_history");
-      transfers = (h.transfers || []) as TransferRecord[];
+      const result = await invoke<{ transfers: TransferRecord[] }>("get_transfer_history");
+      transfers = result.transfers;
     } catch {
-      // ignore
+      console.warn("loadHistory failed");
     }
     loading = false;
   }
@@ -48,7 +48,7 @@
     try {
       await invoke("cancel_transfer");
     } catch {
-      // ignore
+      console.warn("cancelTransfer failed");
     }
   }
 
@@ -57,7 +57,7 @@
       await invoke("clear_transfer_history");
       transfers = [];
     } catch {
-      // ignore
+      console.warn("clearHistory failed");
     }
   }
 
@@ -66,7 +66,7 @@
       await invoke("set_record_pinned", { id, pinned: !pinned });
       await loadHistory();
     } catch {
-      // ignore
+      console.warn("togglePin failed");
     }
   }
 
@@ -88,7 +88,7 @@
       await invoke("delete_transfer_record", { id: deleteTarget.id });
       transfers = transfers.filter((t) => t.id !== deleteTarget!.id);
     } catch {
-      // ignore
+      console.warn("doDelete failed");
     }
     deleting = false;
     deleteTarget = null;
@@ -150,6 +150,84 @@
       No transfers yet.
     </div>
   {:else}
+    {#snippet transferCard(tx: TransferRecord, showFiles: boolean)}
+      <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
+        <CardContent class="flex items-start gap-3 p-3">
+          <div class="mt-0.5 shrink-0">
+            {#if tx.status === "in_progress"}
+              <LoaderCircle class="h-5 w-5 animate-spin text-blue-500" />
+            {:else}
+              <div class="flex h-5 w-5 items-center justify-center rounded-full {tx.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' : tx.status === 'cancelled' ? 'bg-muted' : 'bg-red-100 dark:bg-red-900/30'}">
+                {#if tx.status === "completed"}
+                  <Check class="h-3 w-3 {statusClass(tx.status)}" />
+                {:else if tx.status === "cancelled"}
+                  <Ban class="h-3 w-3 {statusClass(tx.status)}" />
+                {:else}
+                  <X class="h-3 w-3 {statusClass(tx.status)}" />
+                {/if}
+              </div>
+            {/if}
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium capitalize {statusClass(tx.status)}">{tx.status.replace('_', ' ')}</span>
+              {#if tx.pinned}
+                <Pin class="h-3 w-3 text-amber-500" />
+              {/if}
+              {#if tx.code}
+                <code class="truncate rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">{tx.code}</code>
+              {/if}
+            </div>
+            {#if showFiles}
+            <ul class="mt-1 space-y-0.5">
+              {#each tx.files as f}
+                <li class="truncate text-xs text-muted-foreground">{fileName(f)}</li>
+              {/each}
+            </ul>
+            {/if}
+            <div class="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+              <span><Clock class="mr-0.5 inline h-3 w-3" />{formatTime(tx.started_at)}</span>
+              {#if tx.completed_at}
+                <span>{formatTime(tx.completed_at)}</span>
+              {/if}
+            </div>
+            {#if tx.error}
+              <p class="mt-1 text-xs text-red-500">{tx.error}</p>
+            {/if}
+          </div>
+          <div class="flex shrink-0 flex-col gap-1">
+            {#if tx.status !== "in_progress"}
+              <button
+                onclick={() => togglePin(tx.id, tx.pinned)}
+                class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-amber-500"
+                title={tx.pinned ? "Unpin" : "Pin"}
+              >
+                {#if tx.pinned}
+                  <PinOff class="h-4 w-4" />
+                {:else}
+                  <Pin class="h-4 w-4" />
+                {/if}
+              </button>
+              <button
+                onclick={() => confirmDelete(tx)}
+                class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                title="Delete"
+              >
+                <Trash2 class="h-4 w-4" />
+              </button>
+            {:else}
+              <button
+                onclick={cancelTransfer}
+                class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                title="Cancel"
+              >
+                <Ban class="h-4 w-4" />
+              </button>
+            {/if}
+          </div>
+        </CardContent>
+      </Card>
+    {/snippet}
     <Tabs value="sent">
       <TabsList class="w-full">
         <TabsTrigger value="sent" class="flex-1 gap-1.5">
@@ -165,154 +243,13 @@
       </TabsList>
       <TabsContent value="sent" class="space-y-2">
         {#each sent as tx (tx.id)}
-          <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
-            <CardContent class="flex items-start gap-3 p-3">
-              <div class="mt-0.5 shrink-0">
-                  {#if tx.status === "in_progress"}
-                    <LoaderCircle class="h-5 w-5 animate-spin text-blue-500" />
-                  {:else}
-                    <div class="flex h-5 w-5 items-center justify-center rounded-full {tx.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' : tx.status === 'cancelled' ? 'bg-muted' : 'bg-red-100 dark:bg-red-900/30'}">
-                      {#if tx.status === "completed"}
-                        <Check class="h-3 w-3 {statusClass(tx.status)}" />
-                      {:else if tx.status === "cancelled"}
-                        <Ban class="h-3 w-3 {statusClass(tx.status)}" />
-                      {:else}
-                        <X class="h-3 w-3 {statusClass(tx.status)}" />
-                      {/if}
-                    </div>
-                  {/if}
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium capitalize {statusClass(tx.status)}">{tx.status.replace('_', ' ')}</span>
-                    {#if tx.pinned}
-                      <Pin class="h-3 w-3 text-amber-500" />
-                    {/if}
-                    {#if tx.code}
-                      <code class="truncate rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">{tx.code}</code>
-                    {/if}
-                  </div>
-                  <ul class="mt-1 space-y-0.5">
-                    {#each tx.files as f}
-                      <li class="truncate text-xs text-muted-foreground">{fileName(f)}</li>
-                    {/each}
-                  </ul>
-                  <div class="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                    <span><Clock class="mr-0.5 inline h-3 w-3" />{formatTime(tx.started_at)}</span>
-                    {#if tx.completed_at}
-                      <span>{formatTime(tx.completed_at)}</span>
-                    {/if}
-                  </div>
-                  {#if tx.error}
-                    <p class="mt-1 text-xs text-red-500">{tx.error}</p>
-                  {/if}
-                </div>
-                <div class="flex shrink-0 flex-col gap-1">
-                  {#if tx.status !== "in_progress"}
-                    <button
-                      onclick={() => togglePin(tx.id, tx.pinned)}
-                      class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-amber-500"
-                      title={tx.pinned ? "Unpin" : "Pin"}
-                    >
-                      {#if tx.pinned}
-                        <PinOff class="h-4 w-4" />
-                      {:else}
-                        <Pin class="h-4 w-4" />
-                      {/if}
-                    </button>
-                    <button
-                      onclick={() => confirmDelete(tx)}
-                      class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      title="Delete"
-                    >
-                      <Trash2 class="h-4 w-4" />
-                    </button>
-                  {:else}
-                    <button
-                      onclick={cancelTransfer}
-                      class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      title="Cancel"
-                    >
-                      <Ban class="h-4 w-4" />
-                    </button>
-                  {/if}
-                </div>
-              </CardContent>
-            </Card>
-          {/each}
+          {@render transferCard(tx, true)}
+        {/each}
       </TabsContent>
       <TabsContent value="received" class="space-y-2">
         {#each received as tx (tx.id)}
-            <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
-              <CardContent class="flex items-start gap-3 p-3">
-                <div class="mt-0.5 shrink-0">
-                  {#if tx.status === "in_progress"}
-                    <LoaderCircle class="h-5 w-5 animate-spin text-blue-500" />
-                  {:else}
-                    <div class="flex h-5 w-5 items-center justify-center rounded-full {tx.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' : tx.status === 'cancelled' ? 'bg-muted' : 'bg-red-100 dark:bg-red-900/30'}">
-                      {#if tx.status === "completed"}
-                        <Check class="h-3 w-3 {statusClass(tx.status)}" />
-                      {:else if tx.status === "cancelled"}
-                        <Ban class="h-3 w-3 {statusClass(tx.status)}" />
-                      {:else}
-                        <X class="h-3 w-3 {statusClass(tx.status)}" />
-                      {/if}
-                    </div>
-                  {/if}
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium capitalize {statusClass(tx.status)}">{tx.status.replace('_', ' ')}</span>
-                    {#if tx.pinned}
-                      <Pin class="h-3 w-3 text-amber-500" />
-                    {/if}
-                    {#if tx.code}
-                      <code class="truncate rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">{tx.code}</code>
-                    {/if}
-                  </div>
-                  <div class="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                    <span><Clock class="mr-0.5 inline h-3 w-3" />{formatTime(tx.started_at)}</span>
-                    {#if tx.completed_at}
-                      <span>{formatTime(tx.completed_at)}</span>
-                    {/if}
-                  </div>
-                  {#if tx.error}
-                    <p class="mt-1 text-xs text-red-500">{tx.error}</p>
-                  {/if}
-                </div>
-                <div class="flex shrink-0 flex-col gap-1">
-                  {#if tx.status !== "in_progress"}
-                    <button
-                      onclick={() => togglePin(tx.id, tx.pinned)}
-                      class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-amber-500"
-                      title={tx.pinned ? "Unpin" : "Pin"}
-                    >
-                      {#if tx.pinned}
-                        <PinOff class="h-4 w-4" />
-                      {:else}
-                        <Pin class="h-4 w-4" />
-                      {/if}
-                    </button>
-                    <button
-                      onclick={() => confirmDelete(tx)}
-                      class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      title="Delete"
-                    >
-                      <Trash2 class="h-4 w-4" />
-                    </button>
-                  {:else}
-                    <button
-                      onclick={cancelTransfer}
-                      class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      title="Cancel"
-                    >
-                      <Ban class="h-4 w-4" />
-                    </button>
-                  {/if}
-                </div>
-              </CardContent>
-            </Card>
-          {/each}
+          {@render transferCard(tx, false)}
+        {/each}
       </TabsContent>
     </Tabs>
   {/if}
