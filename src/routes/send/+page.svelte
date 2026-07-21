@@ -50,7 +50,8 @@
   async function pickFiles() {
     const result = await open({ multiple: true });
     if (result) {
-      filePaths = typeof result === "string" ? [result] : result;
+      const newFiles = typeof result === "string" ? [result] : result;
+      filePaths = [...filePaths, ...newFiles];
     }
   }
 
