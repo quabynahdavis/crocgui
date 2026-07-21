@@ -93,13 +93,6 @@
     deleteTarget = null;
   }
 
-  function statusIcon(status: string) {
-    if (status === "in_progress") return LoaderCircle;
-    if (status === "completed") return Check;
-    if (status === "cancelled") return Ban;
-    return X;
-  }
-
   function statusClass(status: string) {
     if (status === "completed") return "text-green-600 dark:text-green-400";
     if (status === "failed") return "text-red-600 dark:text-red-400";
@@ -172,7 +165,13 @@
                     <LoaderCircle class="h-5 w-5 animate-spin text-blue-500" />
                   {:else}
                     <div class="flex h-5 w-5 items-center justify-center rounded-full {tx.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' : tx.status === 'cancelled' ? 'bg-muted' : 'bg-red-100 dark:bg-red-900/30'}">
-                      <svelte:component this={statusIcon(tx.status)} class="h-3 w-3 {statusClass(tx.status)}" />
+                      {#if tx.status === "completed"}
+                        <Check class="h-3 w-3 {statusClass(tx.status)}" />
+                      {:else if tx.status === "cancelled"}
+                        <Ban class="h-3 w-3 {statusClass(tx.status)}" />
+                      {:else}
+                        <X class="h-3 w-3 {statusClass(tx.status)}" />
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -254,7 +253,13 @@
                     <LoaderCircle class="h-5 w-5 animate-spin text-blue-500" />
                   {:else}
                     <div class="flex h-5 w-5 items-center justify-center rounded-full {tx.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' : tx.status === 'cancelled' ? 'bg-muted' : 'bg-red-100 dark:bg-red-900/30'}">
-                      <svelte:component this={statusIcon(tx.status)} class="h-3 w-3 {statusClass(tx.status)}" />
+                      {#if tx.status === "completed"}
+                        <Check class="h-3 w-3 {statusClass(tx.status)}" />
+                      {:else if tx.status === "cancelled"}
+                        <Ban class="h-3 w-3 {statusClass(tx.status)}" />
+                      {:else}
+                        <X class="h-3 w-3 {statusClass(tx.status)}" />
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -329,6 +334,7 @@
     <div
       class="w-full rounded-t-xl bg-background p-6 shadow-lg sm:max-w-sm sm:rounded-xl"
       onclick={(e) => e.stopPropagation()}
+      role="presentation"
     >
       <h3 class="mb-2 text-lg font-semibold">Delete transfer record?</h3>
       <p class="mb-1 text-sm text-muted-foreground">
