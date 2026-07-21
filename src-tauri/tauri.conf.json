@@ -14,7 +14,11 @@
       {
         "title": "croc-gui",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "minWidth": 360,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false
       }
     ],
     "security": {
@@ -33,6 +37,24 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": null,
+      "nsis": null
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    },
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    },
+    "android": {
+      "minSdkVersion": 26
+    }
   }
 }

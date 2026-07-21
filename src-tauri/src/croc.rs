@@ -38,6 +38,17 @@ fn croc_binary(app: &AppHandle) -> PathBuf {
     PathBuf::from(binary_name)
 }
 
+fn croc_not_supported() -> String {
+    #[cfg(target_os = "ios")]
+    {
+        "croc transfers are not supported on iOS".into()
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        "croc binary not found. Run 'bun run download-croc' or place croc in PATH.".into()
+    }
+}
+
 fn build_base_args(
     relay: Option<&str>,
     curve: Option<&str>,
@@ -119,23 +130,33 @@ fn spawn_and_monitor(
                     history::update_status(&app, id, history::TransferStatus::Completed, None);
                 }
                 let _ = app.emit(complete_event, if code_event { code } else { String::new() });
-                let _ = app.notification().builder()
-                    .title("croc-gui")
-                    .body("Transfer complete!")
-                    .show();
+                push_notification(&app, "croc-gui", "Transfer complete!");
             }
             _ => {
                 if let Some(id) = &history_id {
                     history::update_status(&app, id, history::TransferStatus::Failed, Some("Transfer failed or cancelled".into()));
                 }
                 let _ = app.emit("croc-error", "Transfer failed or cancelled");
-                let _ = app.notification().builder()
-                    .title("croc-gui")
-                    .body("Transfer failed or was cancelled")
-                    .show();
+                push_notification(&app, "croc-gui", "Transfer failed or was cancelled");
             }
         }
     });
+}
+
+fn push_notification(app: &AppHandle, title: &str, body: &str) {
+    let _ = app.notification().builder()
+        .title(title)
+        .body(body)
+        .show();
+}
+
+fn check_binary(app: &AppHandle) -> Result<PathBuf, String> {
+    let binary = croc_binary(app);
+    if binary.exists() {
+        Ok(binary)
+    } else {
+        Err(croc_not_supported())
+    }
 }
 
 #[tauri::command]
@@ -146,6 +167,8 @@ pub fn send_file(
     curve: Option<String>,
     disable_compression: Option<bool>,
 ) -> Result<(), String> {
+    let binary = check_binary(&app)?;
+
     let id = history::generate_id();
     let record = history::TransferRecord {
         id: id.clone(),
@@ -162,7 +185,6 @@ pub fn send_file(
     };
     history::add_record(&app, record);
 
-    let binary = croc_binary(&app);
     let mut args = build_base_args(relay.as_deref(), curve.as_deref(), disable_compression.unwrap_or(false));
     args.push("send".to_string());
     args.extend(paths.clone());
@@ -183,6 +205,8 @@ pub fn receive_file(
     curve: Option<String>,
     disable_compression: Option<bool>,
 ) -> Result<(), String> {
+    let binary = check_binary(&app)?;
+
     let id = history::generate_id();
     let record = history::TransferRecord {
         id: id.clone(),
@@ -199,7 +223,6 @@ pub fn receive_file(
     };
     history::add_record(&app, record);
 
-    let binary = croc_binary(&app);
     let args = build_base_args(relay.as_deref(), curve.as_deref(), disable_compression.unwrap_or(false));
 
     let mut cmd = Command::new(&binary);
@@ -237,6 +260,11 @@ pub fn cancel_transfer(app: AppHandle) -> Result<(), String> {
         let _ = app.emit("croc-error", "Transfer cancelled");
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn check_croc_available(app: AppHandle) -> bool {
+    check_binary(&app).is_ok()
 }
 
 #[tauri::command]
