@@ -3,12 +3,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { ArrowLeft, Upload, Copy, Check, LoaderCircle } from "@lucide/svelte";
+  import { ArrowLeft, Upload, Copy, Check, File, X } from "@lucide/svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Progress from "$lib/components/ui/progress/progress.svelte";
 
-  let filePath = $state("");
+  let filePaths = $state<string[]>([]);
   let transferring = $state(false);
   let code = $state("");
   let status = $state("");
@@ -47,11 +47,15 @@
     unlisten.forEach((fn) => fn());
   });
 
-  async function pickFile() {
-    const result = await open({ multiple: false });
+  async function pickFiles() {
+    const result = await open({ multiple: true });
     if (result) {
-      filePath = result;
+      filePaths = typeof result === "string" ? [result] : result;
     }
+  }
+
+  function removeFile(idx: number) {
+    filePaths = filePaths.filter((_, i) => i !== idx);
   }
 
   async function loadSettings() {
@@ -68,13 +72,13 @@
   }
 
   async function handleSend() {
-    if (!filePath || transferring) return;
+    if (filePaths.length === 0 || transferring) return;
     transferring = true;
     status = "starting";
     code = "";
     progressLog = [];
     try {
-      await invoke("send_file", { path: filePath, ...(await loadSettings()) });
+      await invoke("send_file", { paths: filePaths, ...(await loadSettings()) });
     } catch (e) {
       status = `error: ${e}`;
       transferring = false;
@@ -108,20 +112,34 @@
   <Card>
     <CardHeader>
       <CardTitle>Send Files</CardTitle>
-      <CardDescription>Select a file to share via croc</CardDescription>
+      <CardDescription>Select files or folders to share via croc</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       {#if !transferring && status !== "complete"}
-        <Button variant="outline" class="w-full" onclick={pickFile}>
+        <Button variant="outline" class="w-full" onclick={pickFiles}>
           <Upload class="h-4 w-4" />
-          {filePath ? "Change File" : "Choose File"}
+          {filePaths.length > 0 ? "Add More Files" : "Choose Files"}
         </Button>
-        {#if filePath}
-          <p class="truncate rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-            {filePath}
-          </p>
+
+        {#if filePaths.length > 0}
+          <div class="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2">
+            {#each filePaths as fp, i}
+              <div class="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
+                <File class="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span class="min-w-0 flex-1 truncate">{fp}</span>
+                <button
+                  onclick={() => removeFile(i)}
+                  class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Remove"
+                >
+                  <X class="h-3.5 w-3.5" />
+                </button>
+              </div>
+            {/each}
+          </div>
+          <p class="text-xs text-muted-foreground">{filePaths.length} file(s) selected</p>
           <Button class="w-full" onclick={handleSend} disabled={transferring}>
-            Send File
+            Send {filePaths.length > 1 ? "Files" : "File"}
           </Button>
         {/if}
       {/if}
@@ -164,7 +182,7 @@
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           Transfer complete!
         </div>
-        <Button variant="outline" class="w-full" onclick={() => { status = ""; filePath = ""; code = ""; progressLog = []; }}>
+        <Button variant="outline" class="w-full" onclick={() => { status = ""; filePaths = []; code = ""; progressLog = []; }}>
           Send Another File
         </Button>
       {/if}

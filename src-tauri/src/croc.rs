@@ -108,7 +108,7 @@ fn spawn_and_monitor(
 #[tauri::command]
 pub fn send_file(
     app: AppHandle,
-    path: String,
+    paths: Vec<String>,
     relay: Option<String>,
     curve: Option<String>,
     disable_compression: Option<bool>,
@@ -116,7 +116,7 @@ pub fn send_file(
     let binary = croc_binary(&app);
     let mut args = build_base_args(relay.as_deref(), curve.as_deref(), disable_compression.unwrap_or(false));
     args.push("send".to_string());
-    args.push(path);
+    args.extend(paths);
 
     let mut cmd = Command::new(&binary);
     cmd.args(&args);
