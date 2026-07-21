@@ -24,12 +24,7 @@
     if (urlCode) {
       code = urlCode;
     }
-    try {
-      const s: any = await invoke("get_settings");
-      outputDir = s.output_dir || "";
-    } catch {
-      // ignore
-    }
+    outputDir = (await loadSettings()).outputDir || "";
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
         progressLog = [...progressLog, e.payload];
