@@ -33,12 +33,13 @@ fn croc_binary(app: &AppHandle) -> PathBuf {
     PathBuf::from(binary_name)
 }
 
-fn run_croc(app: AppHandle, args: Vec<String>, complete_event: &'static str, code_event: Option<&'static str>) {
+#[tauri::command]
+pub fn send_file(app: AppHandle, path: String) -> Result<(), String> {
     let binary = croc_binary(&app);
 
     std::thread::spawn(move || {
         let mut child = match Command::new(&binary)
-            .args(&args)
+            .args(["--yes", "send", &path])
             .stderr(Stdio::piped())
             .stdout(Stdio::null())
             .spawn()
@@ -62,12 +63,10 @@ fn run_croc(app: AppHandle, args: Vec<String>, complete_event: &'static str, cod
                 Err(_) => continue,
             };
             let _ = app.emit("croc-progress", &line);
-            if let Some(event) = code_event {
-                if (line.contains("Code is:") || line.contains("code is:")) && code.is_empty() {
-                    if let Some(c) = line.split(':').nth(1) {
-                        code = c.trim().to_string();
-                        let _ = app.emit(event, &code);
-                    }
+            if (line.contains("Code is:") || line.contains("code is:")) && code.is_empty() {
+                if let Some(c) = line.split(':').nth(1) {
+                    code = c.trim().to_string();
+                    let _ = app.emit("croc-code", &code);
                 }
             }
         }
@@ -76,34 +75,61 @@ fn run_croc(app: AppHandle, args: Vec<String>, complete_event: &'static str, cod
 
         match child.wait() {
             Ok(status) if status.success() => {
-                let _ = app.emit(complete_event, code);
+                let _ = app.emit("croc-complete", code);
             }
             _ => {
                 let _ = app.emit("croc-error", "Transfer failed or cancelled");
             }
         }
     });
-}
 
-#[tauri::command]
-pub fn send_file(app: AppHandle, path: String) -> Result<(), String> {
-    run_croc(
-        app,
-        vec!["send".into(), "--yes".into(), path],
-        "croc-complete",
-        Some("croc-code"),
-    );
     Ok(())
 }
 
 #[tauri::command]
 pub fn receive_file(app: AppHandle, code: String) -> Result<(), String> {
-    run_croc(
-        app,
-        vec!["--yes".into(), code],
-        "croc-receive-complete",
-        None,
-    );
+    let binary = croc_binary(&app);
+
+    std::thread::spawn(move || {
+        let mut child = match Command::new(&binary)
+            .args(["--yes"])
+            .env("CROC_SECRET", &code)
+            .stderr(Stdio::piped())
+            .stdout(Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = app.emit("croc-error", format!("Failed to start croc: {}", e));
+                return;
+            }
+        };
+
+        *app.state::<CrocState>().pid.lock().unwrap() = Some(child.id());
+
+        let stderr = child.stderr.take().unwrap();
+        let reader = std::io::BufReader::new(stderr);
+
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+            let _ = app.emit("croc-progress", &line);
+        }
+
+        *app.state::<CrocState>().pid.lock().unwrap() = None;
+
+        match child.wait() {
+            Ok(status) if status.success() => {
+                let _ = app.emit("croc-receive-complete", "Transfer complete");
+            }
+            _ => {
+                let _ = app.emit("croc-error", "Receive failed or cancelled");
+            }
+        }
+    });
+
     Ok(())
 }
 
