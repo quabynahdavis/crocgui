@@ -2,7 +2,7 @@ mod config;
 mod croc;
 mod history;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,12 +23,8 @@ pub fn run() {
 
     builder = builder
         .setup(|app| {
-            let settings = config::read_settings(app.app_handle());
-
             #[cfg(desktop)]
             {
-                let minimize_to_tray = settings.minimize_to_tray;
-
                 use tauri::menu::{MenuBuilder, MenuItemBuilder};
                 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
@@ -51,7 +47,7 @@ pub fn run() {
                 let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
                     .expect("Failed to load tray icon");
 
-                let _tray = TrayIconBuilder::with_id("main-tray")
+                let tray = TrayIconBuilder::with_id("main-tray")
                     .icon(icon)
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id.as_ref() {
@@ -63,7 +59,7 @@ pub fn run() {
                         }
                         route @ ("send" | "receive" | "settings") => {
                             if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.eval(&format!("window.location.href = '/{route}'"));
+                                let _ = window.emit("navigate", format!("/{route}"));
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -87,9 +83,7 @@ pub fn run() {
                     })
                     .build(app)?;
 
-                if minimize_to_tray {
-                    let _ = _tray;
-                }
+                drop(tray);
             }
 
             Ok(())
@@ -98,9 +92,9 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.on_window_event(|window, event| {
-            let app = window.app_handle();
-            let settings = config::read_settings(app);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+                let settings = config::read_settings(app);
                 if settings.minimize_to_tray {
                     let _ = window.hide();
                     api.prevent_close();

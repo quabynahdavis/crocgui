@@ -1,10 +1,13 @@
 use std::io::BufRead;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::history;
+
+static TRANSFER_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 pub struct CrocState {
     pub pid: std::sync::Mutex<Option<u32>>,
@@ -80,7 +83,9 @@ fn spawn_and_monitor(
     code_event: bool,
     history_id: Option<String>,
 ) {
-    *app.state::<CrocState>().history_id.lock().unwrap() = history_id.clone();
+    if let Ok(mut h) = app.state::<CrocState>().history_id.lock() {
+        *h = history_id.clone();
+    }
 
     std::thread::spawn(move || {
         let mut child = match cmd.stderr(Stdio::piped()).stdout(Stdio::null()).spawn() {
@@ -90,11 +95,14 @@ fn spawn_and_monitor(
                     history::update_status(&app, id, history::TransferStatus::Failed, Some(format!("Failed to start croc: {}", e)));
                 }
                 let _ = app.emit("croc-error", format!("Failed to start croc: {}", e));
+                TRANSFER_IN_PROGRESS.store(false, Ordering::Relaxed);
                 return;
             }
         };
 
-        *app.state::<CrocState>().pid.lock().unwrap() = Some(child.id());
+        if let Ok(mut p) = app.state::<CrocState>().pid.lock() {
+            *p = Some(child.id());
+        }
 
         let stderr = child.stderr.take().unwrap();
         let reader = std::io::BufReader::new(stderr);
@@ -106,23 +114,28 @@ fn spawn_and_monitor(
                 Err(_) => continue,
             };
             let _ = app.emit("croc-progress", &line);
-            if code_event && (line.contains("Code is:") || line.contains("code is:")) && code.is_empty() {
-                if let Some(c) = line.split(':').nth(1) {
-                    code = c.trim().to_string();
-                    let _ = app.emit("croc-code", &code);
-                    if let Some(id) = &history_id {
-                        let mut h = history::load_history(&app);
-                        if let Some(record) = h.transfers.iter_mut().find(|r| r.id == *id) {
-                            record.code = Some(code.clone());
+            if code_event && code.is_empty() {
+                let lower = line.to_lowercase();
+                if let Some(idx) = lower.find("code is:") {
+                    let rest = &line[idx + "code is:".len()..];
+                    let extracted = rest.trim().to_string();
+                    if !extracted.is_empty() {
+                        code = extracted;
+                        let _ = app.emit("croc-code", &code);
+                        if let Some(id) = &history_id {
+                            history::update_record_code(&app, id, &code);
                         }
-                        history::save_history(&app, &h);
                     }
                 }
             }
         }
 
-        *app.state::<CrocState>().pid.lock().unwrap() = None;
-        *app.state::<CrocState>().history_id.lock().unwrap() = None;
+        if let Ok(mut p) = app.state::<CrocState>().pid.lock() {
+            *p = None;
+        }
+        if let Ok(mut h) = app.state::<CrocState>().history_id.lock() {
+            *h = None;
+        }
 
         match child.wait() {
             Ok(status) if status.success() => {
@@ -134,12 +147,20 @@ fn spawn_and_monitor(
             }
             _ => {
                 if let Some(id) = &history_id {
-                    history::update_status(&app, id, history::TransferStatus::Failed, Some("Transfer failed or cancelled".into()));
+                    let record = history::load_history(&app)
+                        .transfers
+                        .iter()
+                        .find(|r| r.id == *id)
+                        .map(|r| r.status.clone());
+                    if record != Some(history::TransferStatus::Cancelled) {
+                        history::update_status(&app, id, history::TransferStatus::Failed, Some("Transfer failed".into()));
+                    }
                 }
                 let _ = app.emit("croc-error", "Transfer failed or cancelled");
                 push_notification(&app, "croc-gui", "Transfer failed or was cancelled");
             }
         }
+        TRANSFER_IN_PROGRESS.store(false, Ordering::Relaxed);
     });
 }
 
@@ -167,6 +188,10 @@ pub fn send_file(
     curve: Option<String>,
     disable_compression: Option<bool>,
 ) -> Result<(), String> {
+    if TRANSFER_IN_PROGRESS.load(Ordering::Relaxed) {
+        return Err("A transfer is already in progress".into());
+    }
+
     let binary = check_binary(&app)?;
 
     let id = history::generate_id();
@@ -176,7 +201,7 @@ pub fn send_file(
         status: history::TransferStatus::InProgress,
         files: paths.clone(),
         code: None,
-        started_at: history::now_iso(),
+        started_at: history::now_timestamp(),
         completed_at: None,
         relay: relay.clone(),
         curve: curve.clone(),
@@ -192,6 +217,7 @@ pub fn send_file(
     let mut cmd = Command::new(&binary);
     cmd.args(&args);
 
+    TRANSFER_IN_PROGRESS.store(true, Ordering::Relaxed);
     spawn_and_monitor(app, cmd, "croc-complete", true, Some(id));
     Ok(())
 }
@@ -205,6 +231,10 @@ pub fn receive_file(
     curve: Option<String>,
     disable_compression: Option<bool>,
 ) -> Result<(), String> {
+    if TRANSFER_IN_PROGRESS.load(Ordering::Relaxed) {
+        return Err("A transfer is already in progress".into());
+    }
+
     let binary = check_binary(&app)?;
 
     let id = history::generate_id();
@@ -214,7 +244,7 @@ pub fn receive_file(
         status: history::TransferStatus::InProgress,
         files: Vec::new(),
         code: Some(code.clone()),
-        started_at: history::now_iso(),
+        started_at: history::now_timestamp(),
         completed_at: None,
         relay: relay.clone(),
         curve: curve.clone(),
@@ -235,6 +265,7 @@ pub fn receive_file(
         }
     }
 
+    TRANSFER_IN_PROGRESS.store(true, Ordering::Relaxed);
     spawn_and_monitor(app, cmd, "croc-receive-complete", false, Some(id));
     Ok(())
 }
@@ -242,23 +273,26 @@ pub fn receive_file(
 #[tauri::command]
 pub fn cancel_transfer(app: AppHandle) -> Result<(), String> {
     let state = app.state::<CrocState>();
-    let pid = state.pid.lock().unwrap().take();
-    if let Some(hid) = state.history_id.lock().unwrap().take() {
+    let pid = state.pid.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if let Some(hid) = state.history_id.lock().unwrap_or_else(|e| e.into_inner()).take() {
         history::update_status(&app, &hid, history::TransferStatus::Cancelled, Some("Cancelled by user".into()));
     }
     if let Some(pid) = pid {
         #[cfg(unix)]
         {
-            let _ = Command::new("kill").arg(pid.to_string()).output();
+            let _ = Command::new("kill")
+                .arg(format!("-{}", pid))
+                .output();
         }
         #[cfg(windows)]
         {
             let _ = Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/F"])
+                .args(["/PID", &pid.to_string(), "/F", "/T"])
                 .output();
         }
         let _ = app.emit("croc-error", "Transfer cancelled");
     }
+    TRANSFER_IN_PROGRESS.store(false, Ordering::Relaxed);
     Ok(())
 }
 
@@ -269,9 +303,18 @@ pub fn check_croc_available(app: AppHandle) -> bool {
 
 #[tauri::command]
 pub fn save_temp_text(filename: String, content: String) -> Result<String, String> {
+    let sanitized = Path::new(&filename)
+        .file_name()
+        .ok_or("Invalid filename")?
+        .to_string_lossy()
+        .into_owned();
+    if sanitized != filename || filename.contains("..") {
+        return Err("Invalid filename".into());
+    }
+
     let dir = std::env::temp_dir().join("croc-gui");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(&filename);
+    let path = dir.join(&sanitized);
     std::fs::write(&path, &content).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }

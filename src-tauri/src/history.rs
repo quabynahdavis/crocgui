@@ -1,16 +1,20 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{AppHandle, Manager};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferDirection {
     Send,
     Receive,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferStatus {
     InProgress,
@@ -48,16 +52,19 @@ impl TransferHistory {
     }
 }
 
-fn history_path(app: &AppHandle) -> PathBuf {
+fn history_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_config_dir()
-        .unwrap_or_else(|_| PathBuf::from("."));
-    dir.join("history.json")
+        .map_err(|e| format!("Failed to get config dir: {}", e))?;
+    Ok(dir.join("history.json"))
 }
 
 pub fn load_history(app: &AppHandle) -> TransferHistory {
-    let path = history_path(app);
+    let path = match history_path(app) {
+        Ok(p) => p,
+        Err(_) => return TransferHistory::new(),
+    };
     if let Ok(data) = fs::read_to_string(&path) {
         if let Ok(history) = serde_json::from_str(&data) {
             return history;
@@ -67,7 +74,10 @@ pub fn load_history(app: &AppHandle) -> TransferHistory {
 }
 
 pub fn save_history(app: &AppHandle, history: &TransferHistory) {
-    let path = history_path(app);
+    let path = match history_path(app) {
+        Ok(p) => p,
+        Err(_) => return,
+    };
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
@@ -88,14 +98,17 @@ pub fn update_status(app: &AppHandle, id: &str, new_status: TransferStatus, erro
         let terminal = new_status.is_terminal();
         record.status = new_status;
         if terminal {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            record.completed_at = Some(now.to_string());
+            record.completed_at = Some(now_timestamp());
         }
         record.error = error;
+    }
+    save_history(app, &history);
+}
+
+pub fn update_record_code(app: &AppHandle, id: &str, code: &str) {
+    let mut history = load_history(app);
+    if let Some(record) = history.transfers.iter_mut().find(|r| r.id == id) {
+        record.code = Some(code.to_string());
     }
     save_history(app, &history);
 }
@@ -112,10 +125,11 @@ pub fn generate_id() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    format!("tx{}", nanos)
+    let seq = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("tx{}-{}", nanos, seq)
 }
 
-pub fn now_iso() -> String {
+pub fn now_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -167,9 +181,14 @@ pub fn delete_record_files(app: AppHandle, id: String) -> Result<(), String> {
     if !matches!(record.direction, TransferDirection::Send) {
         return Err("Can only delete files for sent transfers".into());
     }
-    for path in &record.files {
-        let _ = std::fs::remove_file(path);
-        let _ = std::fs::remove_dir_all(path);
+    for path_str in &record.files {
+        let path = Path::new(path_str);
+        if !path.exists() {
+            continue;
+        }
+        if path.is_file() {
+            let _ = fs::remove_file(path);
+        }
     }
     Ok(())
 }
