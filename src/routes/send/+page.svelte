@@ -8,7 +8,7 @@
     ClipboardList, StickyNote, Eye,
   } from "@lucide/svelte";
   import { loadSettings } from "$lib/settings";
-  import { readText } from "@tauri-apps/plugin-clipboard-manager";
+  import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { sendState } from "$lib/stores/send-state.svelte";
   import type { SendMode, SendItem } from "$lib/stores/send-state.svelte";
   import Button from "$lib/components/ui/button/button.svelte";
@@ -20,14 +20,13 @@
   let copied = $state(false);
 
   let unlisten: (() => void)[] = [];
-  let listenersRegistered = false;
 
   onMount(async () => {
-    if (listenersRegistered) return;
-    listenersRegistered = true;
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
         sendState.progressLog = [...sendState.progressLog, e.payload];
+        const m = e.payload.match(/^\s*(\d+)%/);
+        if (m) sendState.progressPercent = parseInt(m[1]);
       }),
     );
     unlisten.push(
@@ -52,6 +51,7 @@
 
   onDestroy(() => {
     unlisten.forEach((fn) => fn());
+    unlisten = [];
   });
 
   const modes: { value: SendMode; label: string; icon: any }[] = [
@@ -114,9 +114,13 @@
     previewTarget = null;
   }
 
-  function copyPreviewText() {
+  async function copyPreviewText() {
     if (!previewTarget?.preview) return;
-    navigator.clipboard.writeText(previewTarget.preview);
+    try {
+      await writeText(previewTarget.preview);
+    } catch {
+      console.warn("clipboard write failed");
+    }
   }
 
   async function handleSend() {
@@ -146,6 +150,7 @@
     sendState.status = "starting";
     sendState.code = "";
     sendState.progressLog = [];
+    sendState.progressPercent = 0;
     try {
       await invoke("send_file", { paths, ...(await loadSettings()) });
     } catch (e) {
@@ -157,7 +162,7 @@
   async function copyCode() {
     if (!sendState.code) return;
     try {
-      await navigator.clipboard.writeText(sendState.code);
+      await writeText(sendState.code);
       copied = true;
       setTimeout(() => (copied = false), 2000);
     } catch {
@@ -165,8 +170,12 @@
     }
   }
 
-  function cancel() {
-    invoke("cancel_transfer");
+  async function cancel() {
+    try {
+      await invoke("cancel_transfer");
+    } catch {
+      console.warn("cancel_transfer failed");
+    }
     sendState.transferring = false;
     sendState.status = "cancelled";
   }
@@ -310,7 +319,7 @@
       {/if}
 
       {#if sendState.transferring}
-        <Progress class="w-full" />
+        <Progress value={sendState.progressPercent} class="w-full" />
         <Button variant="destructive" class="w-full" onclick={cancel}>
           Cancel
         </Button>

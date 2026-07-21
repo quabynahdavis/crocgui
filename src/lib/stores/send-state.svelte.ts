@@ -18,6 +18,7 @@ class SendState {
   code = $state("");
   status = $state("");
   progressLog = $state<string[]>([]);
+  progressPercent = $state(0);
 
   reset() {
     this.items = [];
@@ -28,6 +29,7 @@ class SendState {
     this.code = "";
     this.status = "";
     this.progressLog = [];
+    this.progressPercent = 0;
   }
 }
 

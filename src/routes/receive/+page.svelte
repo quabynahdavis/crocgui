@@ -15,11 +15,8 @@
 
 
   let unlisten: (() => void)[] = [];
-  let listenersRegistered = false;
 
   onMount(async () => {
-    if (listenersRegistered) return;
-    listenersRegistered = true;
     const urlCode = $page.url.searchParams.get("code");
     if (urlCode && !receiveState.code) {
       receiveState.code = urlCode;
@@ -30,6 +27,8 @@
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
         receiveState.progressLog = [...receiveState.progressLog, e.payload];
+        const m = e.payload.match(/^\s*(\d+)%/);
+        if (m) receiveState.progressPercent = parseInt(m[1]);
       }),
     );
     unlisten.push(
@@ -48,6 +47,7 @@
 
   onDestroy(() => {
     unlisten.forEach((fn) => fn());
+    unlisten = [];
   });
 
   async function handleReceive() {
@@ -55,6 +55,7 @@
     receiveState.transferring = true;
     receiveState.status = "starting";
     receiveState.progressLog = [];
+    receiveState.progressPercent = 0;
     try {
       await invoke("receive_file", {
         code: receiveState.code.trim(),
@@ -77,8 +78,12 @@
     }
   }
 
-  function cancel() {
-    invoke("cancel_transfer");
+  async function cancel() {
+    try {
+      await invoke("cancel_transfer");
+    } catch {
+      console.warn("cancel_transfer failed");
+    }
     receiveState.transferring = false;
     receiveState.status = "cancelled";
   }
@@ -130,7 +135,7 @@
       {/if}
 
       {#if receiveState.transferring}
-        <Progress class="w-full" />
+        <Progress value={receiveState.progressPercent} class="w-full" />
         <Button variant="destructive" class="w-full" onclick={cancel}>
           Cancel
         </Button>
