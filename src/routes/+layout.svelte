@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { page } from "$app/stores";
+  import { goto } from "$app/navigation";
+  import { listen } from "@tauri-apps/api/event";
   import { ArrowUpFromLine, ArrowDownToLine, Settings, Send, History } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import { initTheme } from "$lib/stores/theme.svelte";
@@ -10,9 +12,17 @@
   const { children } = $props();
 
   let currentTheme = $state<Theme>("system");
+  let unlistenNavigate: (() => void) | null = null;
 
-  onMount(() => {
+  onMount(async () => {
     currentTheme = initTheme();
+    unlistenNavigate = await listen<string>("navigate", (e) => {
+      goto(e.payload);
+    });
+  });
+
+  onDestroy(() => {
+    unlistenNavigate?.();
   });
 
   const links = [

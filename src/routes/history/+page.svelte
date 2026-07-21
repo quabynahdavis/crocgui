@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import {
     ArrowLeft, Send, Download, Check, X, Clock, LoaderCircle,
     Trash2, Ban, Pin, PinOff,
@@ -28,10 +29,24 @@
   let deleteTarget = $state<TransferRecord | null>(null);
   let deleting = $state(false);
 
-  onMount(() => {
+  let unlisten: (() => void)[] = [];
+
+  onMount(async () => {
     loadHistory();
-    const interval = setInterval(loadHistory, 2000);
-    return () => clearInterval(interval);
+    unlisten.push(
+      await listen("croc-complete", () => loadHistory()),
+    );
+    unlisten.push(
+      await listen("croc-receive-complete", () => loadHistory()),
+    );
+    unlisten.push(
+      await listen("croc-error", () => loadHistory()),
+    );
+  });
+
+  onDestroy(() => {
+    unlisten.forEach((fn) => fn());
+    unlisten = [];
   });
 
   async function loadHistory() {
@@ -104,7 +119,7 @@
   function formatTime(ts: string) {
     if (!ts) return "";
     const n = Number(ts);
-    if (!n) return ts;
+    if (n === null || isNaN(n)) return ts;
     const d = new Date(n * 1000);
     return d.toLocaleString();
   }

@@ -39,7 +39,13 @@ pub fn read_settings(app: &AppHandle) -> Settings {
 }
 
 fn config_path(app: &AppHandle) -> PathBuf {
-    let dir = app.path().app_config_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let dir = match app.path().app_config_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to get config dir, using temp dir: {}", e);
+            std::env::temp_dir().join("croc-gui")
+        }
+    };
     dir.join("settings.json")
 }
 
