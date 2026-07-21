@@ -4,6 +4,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
   import { ArrowLeft, Upload, Copy, Check, File, X } from "@lucide/svelte";
+  import { loadSettings } from "$lib/settings";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Progress from "$lib/components/ui/progress/progress.svelte";
@@ -57,19 +58,6 @@
 
   function removeFile(idx: number) {
     filePaths = filePaths.filter((_, i) => i !== idx);
-  }
-
-  async function loadSettings() {
-    try {
-      const s: any = await invoke("get_settings");
-      return {
-        relay: s.relay || null,
-        curve: s.curve || null,
-        disableCompression: s.disable_compression || false,
-      };
-    } catch {
-      return { relay: null, curve: null, disableCompression: false };
-    }
   }
 
   async function handleSend() {

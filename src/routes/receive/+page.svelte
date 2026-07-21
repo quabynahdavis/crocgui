@@ -4,6 +4,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { page } from "$app/stores";
   import { ArrowLeft, Download, LoaderCircle, FolderOpen } from "@lucide/svelte";
+  import { loadSettings } from "$lib/settings";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Input from "$lib/components/ui/input/input.svelte";
@@ -51,19 +52,6 @@
   onDestroy(() => {
     unlisten.forEach((fn) => fn());
   });
-
-  async function loadSettings() {
-    try {
-      const s: any = await invoke("get_settings");
-      return {
-        relay: s.relay || null,
-        curve: s.curve || null,
-        disableCompression: s.disable_compression || false,
-      };
-    } catch {
-      return { relay: null, curve: null, disableCompression: false };
-    }
-  }
 
   async function handleReceive() {
     if (!code.trim() || transferring) return;
