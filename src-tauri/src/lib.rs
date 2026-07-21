@@ -1,5 +1,6 @@
 mod config;
 mod croc;
+mod history;
 
 use tauri::Manager;
 
@@ -99,6 +100,8 @@ pub fn run() {
             croc::cancel_transfer,
             config::get_settings,
             config::save_settings,
+            history::get_transfer_history,
+            history::clear_transfer_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

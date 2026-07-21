@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { ArrowUpFromLine, ArrowDownToLine, Settings, Send } from "@lucide/svelte";
+  import { ArrowUpFromLine, ArrowDownToLine, Settings, Send, History } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import { initTheme } from "$lib/stores/theme.svelte";
   import type { Theme } from "$lib/stores/theme.svelte";
@@ -20,6 +20,7 @@
   const links = [
     { href: "/send", label: "Send", icon: ArrowUpFromLine },
     { href: "/receive", label: "Receive", icon: ArrowDownToLine },
+    { href: "/history", label: "History", icon: History },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 </script>
