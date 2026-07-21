@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { ArrowUpFromLine, ArrowDownToLine, Settings, Send, Home } from "@lucide/svelte";
+  import { ArrowUpFromLine, ArrowDownToLine, Settings, Send } from "@lucide/svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import { initTheme } from "$lib/stores/theme.svelte";
   import type { Theme } from "$lib/stores/theme.svelte";
@@ -35,7 +35,7 @@
       {#each links as { href, label, icon: Icon }}
         <a
           href={href}
-          class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors {page.url.pathname.startsWith(href) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
+          class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors {$page.url.pathname.startsWith(href) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
         >
           <Icon class="h-4 w-4" />
           {label}
@@ -64,7 +64,7 @@
       {#each links as { href, label, icon: Icon }}
         <a
           href={href}
-          class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors {page.url.pathname.startsWith(href) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
+          class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors {$page.url.pathname.startsWith(href) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
           onclick={() => (menuOpen = false)}
         >
           <Icon class="h-4 w-4" />
