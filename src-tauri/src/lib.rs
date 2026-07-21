@@ -98,6 +98,7 @@ pub fn run() {
             croc::send_file,
             croc::receive_file,
             croc::cancel_transfer,
+            croc::save_temp_text,
             config::get_settings,
             config::save_settings,
             history::get_transfer_history,

@@ -238,3 +238,12 @@ pub fn cancel_transfer(app: AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn save_temp_text(filename: String, content: String) -> Result<String, String> {
+    let dir = std::env::temp_dir().join("croc-gui");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&filename);
+    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
