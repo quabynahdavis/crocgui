@@ -158,6 +158,10 @@
                   <Button size="sm" variant="destructive" class="shrink-0" onclick={() => cancelTransfer(tx.id)}>
                     Cancel
                   </Button>
+                {:else if tx.status === "failed" || tx.status === "cancelled"}
+                  <a href="/send" class="shrink-0">
+                    <Button size="sm" variant="outline">Retry</Button>
+                  </a>
                 {/if}
               </CardContent>
             </Card>
@@ -207,6 +211,10 @@
                   <Button size="sm" variant="destructive" class="shrink-0" onclick={() => cancelTransfer(tx.id)}>
                     Cancel
                   </Button>
+                {:else if tx.status === "failed" || tx.status === "cancelled"}
+                  <a href="/receive?code={encodeURIComponent(tx.code || '')}" class="shrink-0">
+                    <Button size="sm" variant="outline">Resume</Button>
+                  </a>
                 {/if}
               </CardContent>
             </Card>

@@ -2,7 +2,8 @@
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { ArrowLeft, Download, LoaderCircle } from "@lucide/svelte";
+  import { page } from "$app/stores";
+  import { ArrowLeft, Download, LoaderCircle, FolderOpen } from "@lucide/svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Input from "$lib/components/ui/input/input.svelte";
@@ -10,6 +11,7 @@
   import Progress from "$lib/components/ui/progress/progress.svelte";
 
   let code = $state("");
+  let outputDir = $state("");
   let transferring = $state(false);
   let status = $state("");
   let progressLog = $state<string[]>([]);
@@ -17,6 +19,16 @@
   let unlisten: (() => void)[] = [];
 
   onMount(async () => {
+    const urlCode = $page.url.searchParams.get("code");
+    if (urlCode) {
+      code = urlCode;
+    }
+    try {
+      const s: any = await invoke("get_settings");
+      outputDir = s.output_dir || "";
+    } catch {
+      // ignore
+    }
     unlisten.push(
       await listen<string>("croc-progress", (e) => {
         progressLog = [...progressLog, e.payload];
@@ -47,10 +59,9 @@
         relay: s.relay || null,
         curve: s.curve || null,
         disableCompression: s.disable_compression || false,
-        outputDir: s.output_dir || null,
       };
     } catch {
-      return { relay: null, curve: null, disableCompression: false, outputDir: null };
+      return { relay: null, curve: null, disableCompression: false };
     }
   }
 
@@ -60,10 +71,24 @@
     status = "starting";
     progressLog = [];
     try {
-      await invoke("receive_file", { code: code.trim(), ...(await loadSettings()) });
+      await invoke("receive_file", {
+        code: code.trim(),
+        ...(await loadSettings()),
+        outputDir: outputDir || null,
+      });
     } catch (e) {
       status = `error: ${e}`;
       transferring = false;
+    }
+  }
+
+  async function pickDir() {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const dir = await open({ directory: true, multiple: false });
+      if (dir) outputDir = dir;
+    } catch {
+      // not in Tauri
     }
   }
 
@@ -96,6 +121,21 @@
             disabled={transferring}
             class="h-11 sm:h-9"
           />
+        </div>
+        <div class="space-y-2">
+          <Label for="output-dir">Save to</Label>
+          <div class="flex gap-2">
+            <Input
+              id="output-dir"
+              bind:value={outputDir}
+              placeholder="Current directory (default)"
+              disabled={transferring}
+              class="h-11 flex-1 sm:h-9"
+            />
+            <Button variant="outline" size="icon" onclick={pickDir} disabled={transferring} class="h-11 w-11 shrink-0 sm:h-9 sm:w-9" title="Browse">
+              <FolderOpen class="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <Button class="w-full" onclick={handleReceive} disabled={transferring || !code.trim()}>
           <Download class="h-4 w-4" />
