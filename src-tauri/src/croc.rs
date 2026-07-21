@@ -1,4 +1,5 @@
 use std::io::BufRead;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -14,9 +15,29 @@ impl CrocState {
     }
 }
 
+fn croc_binary(app: &AppHandle) -> PathBuf {
+    let resource_dir = app.path().resource_dir().ok();
+    let binary_name = if cfg!(target_os = "windows") {
+        "croc.exe"
+    } else {
+        "croc"
+    };
+
+    if let Some(dir) = resource_dir {
+        let bundled = dir.join("binaries").join(binary_name);
+        if bundled.exists() {
+            return bundled;
+        }
+    }
+
+    PathBuf::from(binary_name)
+}
+
 fn run_croc(app: AppHandle, args: Vec<String>, complete_event: &'static str, code_event: Option<&'static str>) {
+    let binary = croc_binary(&app);
+
     std::thread::spawn(move || {
-        let mut child = match Command::new("croc")
+        let mut child = match Command::new(&binary)
             .args(&args)
             .stderr(Stdio::piped())
             .stdout(Stdio::null())
