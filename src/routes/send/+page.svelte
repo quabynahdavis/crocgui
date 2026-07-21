@@ -87,9 +87,9 @@
 </script>
 
 <div class="mx-auto max-w-lg p-4">
-  <a href="/" class="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-    <ArrowLeft class="h-4 w-4" />
-    Back
+  <a href="/" class="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground sm:mb-6 sm:min-h-0">
+    <ArrowLeft class="h-5 w-5 sm:h-4 sm:w-4" />
+    <span class="sm:text-sm">Back</span>
   </a>
 
   <Card>
@@ -116,8 +116,14 @@
       {#if code}
         <div class="rounded-lg border bg-muted/50 p-4 text-center">
           <p class="mb-2 text-sm text-muted-foreground">Share this code with the recipient:</p>
-          <div class="flex items-center justify-center gap-2">
-            <code class="select-all rounded bg-primary/10 px-4 py-2 text-lg font-bold tracking-wider text-primary">
+          <div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <code
+              class="w-full break-all rounded bg-primary/10 px-4 py-3 text-lg font-bold tracking-wider text-primary sm:select-all sm:w-auto"
+              role="button"
+              tabindex="0"
+              onclick={copyCode}
+              onkeydown={(e) => e.key === "Enter" && copyCode()}
+            >
               {code}
             </code>
             <Button size="icon" variant="ghost" onclick={copyCode} title="Copy code">
@@ -128,6 +134,9 @@
               {/if}
             </Button>
           </div>
+          {#if copied}
+            <p class="mt-2 text-xs text-green-600 dark:text-green-400">Copied!</p>
+          {/if}
         </div>
       {/if}
 

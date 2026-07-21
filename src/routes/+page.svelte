@@ -7,13 +7,13 @@
 <div class="flex min-h-[calc(100vh-4rem)] items-center justify-center p-4">
   <div class="mx-auto flex w-full max-w-2xl flex-col items-center gap-8 text-center">
     <div class="space-y-2">
-      <h1 class="text-4xl font-bold tracking-tight">croc-gui</h1>
-      <p class="text-lg text-muted-foreground">
+      <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">croc-gui</h1>
+      <p class="text-base text-muted-foreground sm:text-lg">
         Securely transfer files between computers using the croc CLI
       </p>
     </div>
 
-    <div class="grid w-full gap-6 sm:grid-cols-2">
+    <div class="grid w-full gap-4 sm:gap-6 sm:grid-cols-2">
       <a href="/send" class="block">
         <Card class="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
           <CardHeader>

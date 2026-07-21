@@ -61,9 +61,9 @@
 </script>
 
 <div class="mx-auto max-w-lg p-4">
-  <a href="/" class="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-    <ArrowLeft class="h-4 w-4" />
-    Back
+  <a href="/" class="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground sm:mb-6 sm:min-h-0">
+    <ArrowLeft class="h-5 w-5 sm:h-4 sm:w-4" />
+    <span class="sm:text-sm">Back</span>
   </a>
 
   <Card>
@@ -80,6 +80,7 @@
             bind:value={code}
             placeholder="e.g. 1234-ABCD-5678-EFGH"
             disabled={transferring}
+            class="h-11 sm:h-9"
           />
         </div>
         <Button class="w-full" onclick={handleReceive} disabled={transferring || !code.trim()}>
