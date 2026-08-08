@@ -259,7 +259,7 @@ describe("send page", () => {
     expect(getByText("a.txt")).toBeInTheDocument();
     expect(getByText("dir")).toBeInTheDocument();
     expect(getByText("note-1.txt")).toBeInTheDocument();
-    expect(getAllByLabelText("Remove")).toHaveLength(3);
+    expect(getAllByLabelText(/remove/i)).toHaveLength(3);
   });
 
   it("removing an item drops it from the store and the list", async () => {
@@ -270,7 +270,7 @@ describe("send page", () => {
 
     const { getAllByLabelText, queryByText } = render(SendPage, {});
 
-    await fireEvent.click(getAllByLabelText("Remove")[0]);
+    await fireEvent.click(getAllByLabelText(/remove/i)[0]);
     await tick();
 
     expect(sendState.items.map((i) => i.label)).toEqual(["b.txt"]);

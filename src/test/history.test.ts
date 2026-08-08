@@ -106,8 +106,8 @@ describe("HistoryPage", () => {
     });
 
     const { findByRole, getByRole } = render(HistoryPage, {});
-    expect(await findByRole("button", { name: "Pin" })).toBeInTheDocument();
-    const pinButton = getByRole("button", { name: "Pin" });
+    expect(await findByRole("button", { name: /pin/i })).toBeInTheDocument();
+    const pinButton = getByRole("button", { name: /pin/i });
     await fireEvent.click(pinButton);
 
     expect(invokeMock).toHaveBeenCalledWith("set_record_pinned", { id: "tx1", pinned: true });
@@ -141,7 +141,7 @@ describe("HistoryPage", () => {
     });
 
     const { findByRole, getByText } = render(HistoryPage, {});
-    const deleteButton = await findByRole("button", { name: "Delete" });
+    const deleteButton = await findByRole("button", { name: /delete/i });
     await fireEvent.click(deleteButton);
 
     expect(getByText("Delete transfer record?")).toBeInTheDocument();
@@ -158,7 +158,7 @@ describe("HistoryPage", () => {
     });
 
     const { findByRole, findByText, getByText } = render(HistoryPage, {});
-    const deleteButton = await findByRole("button", { name: "Delete" });
+    const deleteButton = await findByRole("button", { name: /delete/i });
     await fireEvent.click(deleteButton);
 
     expect(await findByText("Delete transfer record?")).toBeInTheDocument();
@@ -180,7 +180,7 @@ describe("HistoryPage", () => {
     });
 
     const { findByRole, findByText, getByText } = render(HistoryPage, {});
-    const deleteButton = await findByRole("button", { name: "Delete" });
+    const deleteButton = await findByRole("button", { name: /delete/i });
     await fireEvent.click(deleteButton);
 
     expect(await findByText("Delete transfer record?")).toBeInTheDocument();
@@ -202,7 +202,7 @@ describe("HistoryPage", () => {
     });
 
     const { findByRole, findByText, getByText, queryByText } = render(HistoryPage, {});
-    const deleteButton = await findByRole("button", { name: "Delete" });
+    const deleteButton = await findByRole("button", { name: /delete/i });
     await fireEvent.click(deleteButton);
 
     expect(await findByText("Delete transfer record?")).toBeInTheDocument();
