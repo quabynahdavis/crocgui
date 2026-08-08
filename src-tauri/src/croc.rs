@@ -52,7 +52,7 @@ fn croc_not_supported() -> String {
     }
 }
 
-fn build_base_args(
+pub fn build_base_args(
     relay: Option<&str>,
     curve: Option<&str>,
     disable_compression: bool,
@@ -74,6 +74,30 @@ fn build_base_args(
         args.push("--no-compress".to_string());
     }
     args
+}
+
+pub fn sanitize_filename(filename: &str) -> Result<String, String> {
+    let sanitized = Path::new(filename)
+        .file_name()
+        .ok_or("Invalid filename")?
+        .to_string_lossy()
+        .into_owned();
+    if sanitized != filename || filename.contains("..") {
+        return Err("Invalid filename".into());
+    }
+    Ok(sanitized)
+}
+
+pub fn extract_code(line: &str) -> Option<String> {
+    let lower = line.to_lowercase();
+    if let Some(idx) = lower.find("code is:") {
+        let rest = &line[idx + "code is:".len()..];
+        let extracted = rest.trim().to_string();
+        if !extracted.is_empty() {
+            return Some(extracted);
+        }
+    }
+    None
 }
 
 fn spawn_and_monitor(
@@ -115,16 +139,11 @@ fn spawn_and_monitor(
             };
             let _ = app.emit("croc-progress", &line);
             if code_event && code.is_empty() {
-                let lower = line.to_lowercase();
-                if let Some(idx) = lower.find("code is:") {
-                    let rest = &line[idx + "code is:".len()..];
-                    let extracted = rest.trim().to_string();
-                    if !extracted.is_empty() {
-                        code = extracted;
-                        let _ = app.emit("croc-code", &code);
-                        if let Some(id) = &history_id {
-                            history::update_record_code(&app, id, &code);
-                        }
+                if let Some(extracted) = extract_code(&line) {
+                    code = extracted;
+                    let _ = app.emit("croc-code", &code);
+                    if let Some(id) = &history_id {
+                        history::update_record_code(&app, id, &code);
                     }
                 }
             }
@@ -303,18 +322,168 @@ pub fn check_croc_available(app: AppHandle) -> bool {
 
 #[tauri::command]
 pub fn save_temp_text(filename: String, content: String) -> Result<String, String> {
-    let sanitized = Path::new(&filename)
-        .file_name()
-        .ok_or("Invalid filename")?
-        .to_string_lossy()
-        .into_owned();
-    if sanitized != filename || filename.contains("..") {
-        return Err("Invalid filename".into());
-    }
-
+    let sanitized = sanitize_filename(&filename)?;
     let dir = std::env::temp_dir().join("croc-gui");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&sanitized);
     std::fs::write(&path, &content).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod build_base_args {
+        use super::*;
+
+        fn args_contain(args: &[String], expected: &str) -> bool {
+            args.iter().any(|a| a == expected)
+        }
+
+        #[test]
+        fn base_yes_flag_always_present() {
+            let args = build_base_args(None, None, false);
+            assert!(args_contain(&args, "--yes"));
+        }
+
+        #[test]
+        fn empty_relay_not_added() {
+            let args = build_base_args(Some(""), None, false);
+            assert!(!args_contain(&args, "--relay"));
+        }
+
+        #[test]
+        fn relay_added_when_provided() {
+            let args = build_base_args(Some("my-relay:9009"), None, false);
+            assert!(args_contain(&args, "--relay"));
+            assert!(args_contain(&args, "my-relay:9009"));
+        }
+
+        #[test]
+        fn empty_curve_not_added() {
+            let args = build_base_args(None, Some(""), false);
+            assert!(!args_contain(&args, "--curve"));
+        }
+
+        #[test]
+        fn curve_added_when_provided() {
+            let args = build_base_args(None, Some("p384"), false);
+            assert!(args_contain(&args, "--curve"));
+            assert!(args_contain(&args, "p384"));
+        }
+
+        #[test]
+        fn compression_flag_added_when_disabled() {
+            let args = build_base_args(None, None, true);
+            assert!(args_contain(&args, "--no-compress"));
+        }
+
+        #[test]
+        fn compression_flag_absent_when_enabled() {
+            let args = build_base_args(None, None, false);
+            assert!(!args_contain(&args, "--no-compress"));
+        }
+
+        #[test]
+        fn all_options_combined() {
+            let args = build_base_args(Some("r"), Some("p521"), true);
+            assert!(args_contain(&args, "--yes"));
+            assert!(args_contain(&args, "--relay"));
+            assert!(args_contain(&args, "r"));
+            assert!(args_contain(&args, "--curve"));
+            assert!(args_contain(&args, "p521"));
+            assert!(args_contain(&args, "--no-compress"));
+        }
+    }
+
+    mod sanitize_filename {
+        use super::*;
+
+        #[test]
+        fn accepts_simple_filename() {
+            assert_eq!(sanitize_filename("note.txt").unwrap(), "note.txt");
+        }
+
+        #[test]
+        fn accepts_filename_with_dots() {
+            assert_eq!(sanitize_filename("my.file.txt").unwrap(), "my.file.txt");
+        }
+
+        #[test]
+        fn rejects_path_traversal() {
+            assert!(sanitize_filename("../../etc/passwd").is_err());
+        }
+
+        #[test]
+        fn rejects_double_dot() {
+            assert!(sanitize_filename("file..txt").is_err());
+        }
+
+        #[test]
+        fn rejects_directory_prefix() {
+            assert!(sanitize_filename("dir/file.txt").is_err());
+        }
+
+        #[test]
+        fn rejects_absolute_path() {
+            assert!(sanitize_filename("/etc/passwd").is_err());
+        }
+
+        #[test]
+        fn rejects_empty() {
+            assert!(sanitize_filename("").is_err());
+        }
+
+        #[test]
+        fn rejects_path_with_directory_components() {
+            assert!(sanitize_filename("path/to/file.txt").is_err());
+        }
+    }
+
+    mod extract_code {
+        use super::*;
+
+        #[test]
+        fn extracts_simple_code() {
+            assert_eq!(
+                extract_code("Code is: 1234-ABCD-5678"),
+                Some("1234-ABCD-5678".to_string())
+            );
+        }
+
+        #[test]
+        fn extracts_case_insensitive() {
+            assert_eq!(
+                extract_code("code is: abc-def"),
+                Some("abc-def".to_string())
+            );
+        }
+
+        #[test]
+        fn extracts_with_extra_whitespace() {
+            assert_eq!(
+                extract_code("Code is:   1234-ABCD   "),
+                Some("1234-ABCD".to_string())
+            );
+        }
+
+        #[test]
+        fn returns_none_without_code() {
+            assert_eq!(extract_code("some other output"), None);
+        }
+
+        #[test]
+        fn returns_none_on_empty_after_colon() {
+            assert_eq!(extract_code("Code is:   "), None);
+        }
+
+        #[test]
+        fn handles_code_in_middle_of_line() {
+            assert_eq!(
+                extract_code("Sending... Code is: XYZ-123 done"),
+                Some("XYZ-123 done".to_string())
+            );
+        }
+    }
 }

@@ -65,7 +65,11 @@ pub fn load_history(app: &AppHandle) -> TransferHistory {
         Ok(p) => p,
         Err(_) => return TransferHistory::new(),
     };
-    if let Ok(data) = fs::read_to_string(&path) {
+    load_history_from_path(&path)
+}
+
+pub fn load_history_from_path(path: &Path) -> TransferHistory {
+    if let Ok(data) = fs::read_to_string(path) {
         if let Ok(history) = serde_json::from_str(&data) {
             return history;
         }
@@ -78,11 +82,15 @@ pub fn save_history(app: &AppHandle, history: &TransferHistory) {
         Ok(p) => p,
         Err(_) => return,
     };
+    save_history_to_path(&path, history);
+}
+
+pub fn save_history_to_path(path: &Path, history: &TransferHistory) {
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
     if let Ok(data) = serde_json::to_string_pretty(history) {
-        let _ = fs::write(&path, data);
+        let _ = fs::write(path, data);
     }
 }
 
@@ -191,4 +199,217 @@ pub fn delete_record_files(app: AppHandle, id: String) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn make_record(id: &str, direction: TransferDirection) -> TransferRecord {
+        TransferRecord {
+            id: id.to_string(),
+            direction,
+            status: TransferStatus::InProgress,
+            files: vec!["/tmp/test.txt".to_string()],
+            code: None,
+            started_at: "1000".to_string(),
+            completed_at: None,
+            relay: None,
+            curve: None,
+            error: None,
+            pinned: false,
+        }
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("croc-gui-test-{}-{}", name, generate_id()));
+        p
+    }
+
+    mod transfer_status {
+        use super::*;
+
+        #[test]
+        fn in_progress_is_not_terminal() {
+            assert!(!TransferStatus::InProgress.is_terminal());
+        }
+
+        #[test]
+        fn completed_is_terminal() {
+            assert!(TransferStatus::Completed.is_terminal());
+        }
+
+        #[test]
+        fn failed_is_terminal() {
+            assert!(TransferStatus::Failed.is_terminal());
+        }
+
+        #[test]
+        fn cancelled_is_terminal() {
+            assert!(TransferStatus::Cancelled.is_terminal());
+        }
+    }
+
+    mod generate_id {
+        use super::*;
+
+        #[test]
+        fn produces_unique_ids() {
+            let ids: std::collections::HashSet<String> =
+                (0..1000).map(|_| generate_id()).collect();
+            assert_eq!(ids.len(), 1000);
+        }
+
+        #[test]
+        fn starts_with_tx() {
+            assert!(generate_id().starts_with("tx"));
+        }
+    }
+
+    mod now_timestamp {
+        use super::*;
+
+        #[test]
+        fn returns_valid_number() {
+            let ts = now_timestamp();
+            let n: u64 = ts.parse().expect("should be a valid u64");
+            assert!(n > 0);
+        }
+    }
+
+    mod history_persistence {
+        use super::*;
+
+        #[test]
+        fn load_returns_empty_for_missing_file() {
+            let history = load_history_from_path(&PathBuf::from("/nonexistent/path.json"));
+            assert_eq!(history.transfers.len(), 0);
+        }
+
+        #[test]
+        fn save_and_load_roundtrip() {
+            let path = temp_path("roundtrip.json");
+            let mut h = TransferHistory::new();
+            h.transfers.push(make_record("tx1", TransferDirection::Send));
+            h.transfers.push(make_record("tx2", TransferDirection::Receive));
+            save_history_to_path(&path, &h);
+
+            let loaded = load_history_from_path(&path);
+            assert_eq!(loaded.transfers.len(), 2);
+            assert_eq!(loaded.transfers[0].id, "tx1");
+            assert_eq!(loaded.transfers[1].id, "tx2");
+
+            let _ = fs::remove_file(&path);
+        }
+
+        #[test]
+        fn load_returns_empty_for_invalid_json() {
+            let path = temp_path("invalid.json");
+            let mut file = fs::File::create(&path).unwrap();
+            file.write_all(b"not json").unwrap();
+
+            let history = load_history_from_path(&path);
+            assert_eq!(history.transfers.len(), 0);
+
+            let _ = fs::remove_file(&path);
+        }
+    }
+
+    mod update_status {
+        use super::*;
+
+        #[test]
+        fn sets_completed_with_timestamp() {
+            let path = temp_path("completed.json");
+            let mut h = TransferHistory::new();
+            h.transfers.push(make_record("tx1", TransferDirection::Send));
+            save_history_to_path(&path, &h);
+
+            let mut loaded = load_history_from_path(&path);
+            if let Some(r) = loaded.transfers.iter_mut().find(|r| r.id == "tx1") {
+                r.status = TransferStatus::Completed;
+                r.completed_at = Some(now_timestamp());
+            }
+            save_history_to_path(&path, &loaded);
+
+            let reloaded = load_history_from_path(&path);
+            let record = reloaded.transfers.iter().find(|r| r.id == "tx1").unwrap();
+            assert_eq!(record.status, TransferStatus::Completed);
+            assert!(record.completed_at.is_some());
+
+            let _ = fs::remove_file(&path);
+        }
+
+        #[test]
+        fn sets_error_message() {
+            let path = temp_path("error.json");
+            let mut h = TransferHistory::new();
+            h.transfers.push(make_record("tx1", TransferDirection::Send));
+            save_history_to_path(&path, &h);
+
+            let mut loaded = load_history_from_path(&path);
+            if let Some(r) = loaded.transfers.iter_mut().find(|r| r.id == "tx1") {
+                r.status = TransferStatus::Failed;
+                r.error = Some("Connection refused".into());
+            }
+            save_history_to_path(&path, &loaded);
+
+            let reloaded = load_history_from_path(&path);
+            let record = reloaded.transfers.iter().find(|r| r.id == "tx1").unwrap();
+            assert_eq!(record.error.as_deref(), Some("Connection refused"));
+
+            let _ = fs::remove_file(&path);
+        }
+    }
+
+    mod serialization {
+        use super::*;
+
+        #[test]
+        fn serializes_direction_as_snake_case() {
+            let record = make_record("tx1", TransferDirection::Send);
+            let json = serde_json::to_string(&record).unwrap();
+            assert!(json.contains("\"direction\":\"send\""));
+        }
+
+        #[test]
+        fn deserializes_from_snake_case() {
+            let json = r#"{"id":"tx1","direction":"receive","status":"in_progress","files":[],"code":null,"started_at":"1000","completed_at":null,"relay":null,"curve":null,"error":null,"pinned":false}"#;
+            let record: TransferRecord = serde_json::from_str(json).unwrap();
+            assert_eq!(record.direction, TransferDirection::Receive);
+        }
+
+        #[test]
+        fn status_serialization_roundtrip() {
+            for status in [
+                TransferStatus::InProgress,
+                TransferStatus::Completed,
+                TransferStatus::Failed,
+                TransferStatus::Cancelled,
+            ] {
+                let s = serde_json::to_string(&status).unwrap();
+                let d: TransferStatus = serde_json::from_str(&s).unwrap();
+                assert_eq!(d, status);
+            }
+        }
+
+        #[test]
+        fn pinned_defaults_to_false() {
+            let json = r#"{"id":"tx1","direction":"send","status":"in_progress","files":[],"code":null,"started_at":"1000","completed_at":null,"relay":null,"curve":null,"error":null}"#;
+            let record: TransferRecord = serde_json::from_str(json).unwrap();
+            assert!(!record.pinned);
+        }
+    }
+
+    mod transfer_history {
+        use super::*;
+
+        #[test]
+        fn new_creates_empty() {
+            let h = TransferHistory::new();
+            assert_eq!(h.transfers.len(), 0);
+        }
+    }
 }

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     pub relay: String,
     pub curve: String,
@@ -30,7 +30,11 @@ impl Default for Settings {
 
 pub fn read_settings(app: &AppHandle) -> Settings {
     let path = config_path(app);
-    if let Ok(data) = std::fs::read_to_string(&path) {
+    read_settings_from_path(&path)
+}
+
+pub fn read_settings_from_path(path: &PathBuf) -> Settings {
+    if let Ok(data) = std::fs::read_to_string(path) {
         if let Ok(settings) = serde_json::from_str(&data) {
             return settings;
         }
@@ -63,10 +67,161 @@ pub fn get_settings(app: AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     let path = config_path(&app);
+    save_settings_to_path(&path, settings)
+}
+
+pub fn save_settings_to_path(path: &PathBuf, settings: Settings) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
     }
     let data = serde_json::to_string_pretty(&settings).map_err(|e| format!("Failed to serialize: {}", e))?;
-    fs::write(&path, data).map_err(|e| format!("Failed to write config: {}", e))?;
+    fs::write(path, data).map_err(|e| format!("Failed to write config: {}", e))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_path(name: &str) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("croc-gui-config-test-{}-{}", name, std::process::id()));
+        p
+    }
+
+    mod defaults {
+        use super::*;
+
+        #[test]
+        fn default_relay_is_empty() {
+            let s = Settings::default();
+            assert_eq!(s.relay, "");
+        }
+
+        #[test]
+        fn default_curve_is_p256() {
+            let s = Settings::default();
+            assert_eq!(s.curve, "p256");
+        }
+
+        #[test]
+        fn default_compression_enabled() {
+            let s = Settings::default();
+            assert!(!s.disable_compression);
+        }
+
+        #[test]
+        fn default_theme_is_system() {
+            let s = Settings::default();
+            assert_eq!(s.theme, "system");
+        }
+
+        #[test]
+        fn default_autostart_disabled() {
+            let s = Settings::default();
+            assert!(!s.autostart);
+        }
+
+        #[test]
+        fn default_minimize_to_tray_enabled() {
+            let s = Settings::default();
+            assert!(s.minimize_to_tray);
+        }
+    }
+
+    mod read_settings_from_path {
+        use super::*;
+
+        #[test]
+        fn missing_file_returns_default() {
+            let s = read_settings_from_path(&PathBuf::from("/nonexistent/settings.json"));
+            assert_eq!(s, Settings::default());
+        }
+
+        #[test]
+        fn invalid_json_returns_default() {
+            let path = temp_path("invalid.json");
+            fs::write(&path, "not json").unwrap();
+            let s = read_settings_from_path(&path);
+            assert_eq!(s, Settings::default());
+            let _ = fs::remove_file(&path);
+        }
+
+        #[test]
+        fn reads_custom_settings() {
+            let path = temp_path("custom.json");
+            let custom = Settings {
+                relay: "my-relay:9009".into(),
+                curve: "p521".into(),
+                disable_compression: true,
+                output_dir: "/home/user/downloads".into(),
+                theme: "dark".into(),
+                autostart: true,
+                minimize_to_tray: false,
+            };
+            save_settings_to_path(&path, custom.clone()).unwrap();
+            let loaded = read_settings_from_path(&path);
+            assert_eq!(loaded.relay, "my-relay:9009");
+            assert_eq!(loaded.curve, "p521");
+            assert!(loaded.disable_compression);
+            assert_eq!(loaded.output_dir, "/home/user/downloads");
+            assert_eq!(loaded.theme, "dark");
+            assert!(loaded.autostart);
+            assert!(!loaded.minimize_to_tray);
+            let _ = fs::remove_file(&path);
+        }
+    }
+
+    mod save_and_load_roundtrip {
+        use super::*;
+
+        #[test]
+        fn roundtrip_preserves_all_fields() {
+            let path = temp_path("roundtrip.json");
+            let original = Settings {
+                relay: "r".into(),
+                curve: "ed25519".into(),
+                disable_compression: true,
+                output_dir: "/tmp/out".into(),
+                theme: "light".into(),
+                autostart: true,
+                minimize_to_tray: false,
+            };
+            save_settings_to_path(&path, original.clone()).unwrap();
+            let loaded = read_settings_from_path(&path);
+            assert_eq!(loaded.relay, original.relay);
+            assert_eq!(loaded.curve, original.curve);
+            assert_eq!(loaded.disable_compression, original.disable_compression);
+            assert_eq!(loaded.output_dir, original.output_dir);
+            assert_eq!(loaded.theme, original.theme);
+            assert_eq!(loaded.autostart, original.autostart);
+            assert_eq!(loaded.minimize_to_tray, original.minimize_to_tray);
+            let _ = fs::remove_file(&path);
+        }
+
+        #[test]
+        fn creates_parent_directories() {
+            let mut path = std::env::temp_dir();
+            path.push(format!("croc-gui-nested-{}", std::process::id()));
+            path.push("deep");
+            path.push("settings.json");
+            let s = Settings::default();
+            save_settings_to_path(&path, s).unwrap();
+            assert!(path.exists());
+            let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+        }
+    }
+
+    mod serialization {
+        use super::*;
+
+        #[test]
+        fn serializes_as_snake_case() {
+            let s = Settings::default();
+            let json = serde_json::to_string(&s).unwrap();
+            assert!(json.contains("\"disable_compression\""));
+            assert!(json.contains("\"output_dir\""));
+            assert!(json.contains("\"minimize_to_tray\""));
+        }
+    }
 }
