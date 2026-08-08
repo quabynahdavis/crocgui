@@ -16,10 +16,13 @@
 
   let unlisten: (() => void)[] = [];
 
+  const CODE_PATTERN = /^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/;
+  const isCodeValid = $derived(CODE_PATTERN.test(receiveState.code.trim()));
+
   onMount(async () => {
     const urlCode = $page.url.searchParams.get("code");
     if (urlCode && !receiveState.code) {
-      receiveState.code = urlCode;
+      receiveState.code = urlCode.toUpperCase();
     }
     if (!receiveState.outputDir) {
       receiveState.outputDir = (await loadSettings()).outputDir || "";
@@ -51,7 +54,7 @@
   });
 
   async function handleReceive() {
-    if (!receiveState.code.trim() || receiveState.transferring) return;
+    if (!isCodeValid || receiveState.transferring) return;
     receiveState.transferring = true;
     receiveState.status = "starting";
     receiveState.progressLog = [];
@@ -107,11 +110,17 @@
           <Label for="code">Code Phrase</Label>
           <Input
             id="code"
-            bind:value={receiveState.code}
+            value={receiveState.code}
+            oninput={(e) => {
+              receiveState.code = e.currentTarget.value.toUpperCase();
+            }}
             placeholder="e.g. 1234-ABCD-5678-EFGH"
             disabled={receiveState.transferring}
             class="h-11 sm:h-9"
           />
+          {#if receiveState.code.trim() && !isCodeValid}
+            <p class="text-xs text-destructive">Code must look like 1234-ABCD-5678-EFGH</p>
+          {/if}
         </div>
         <div class="space-y-2">
           <Label for="output-dir">Save to</Label>
@@ -128,7 +137,7 @@
             </Button>
           </div>
         </div>
-        <Button class="w-full" onclick={handleReceive} disabled={receiveState.transferring || !receiveState.code.trim()}>
+        <Button class="w-full" onclick={handleReceive} disabled={receiveState.transferring || !isCodeValid}>
           <Download class="h-4 w-4" />
           Receive Files
         </Button>
