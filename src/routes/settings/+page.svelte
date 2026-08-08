@@ -2,7 +2,8 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-  import { ArrowLeft, Sun, Moon, Monitor, FolderOpen, Network, Shield, FileX, LogIn, MinusCircle } from "@lucide/svelte";
+  import { check, type Update } from "@tauri-apps/plugin-updater";
+  import { ArrowLeft, Sun, Moon, Monitor, FolderOpen, Network, Shield, FileX, LogIn, MinusCircle, LoaderCircle, RefreshCw, Download } from "@lucide/svelte";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
   import Input from "$lib/components/ui/input/input.svelte";
@@ -19,6 +20,16 @@
   let autostart = $state(false);
   let minimizeToTray = $state(true);
   let saved = $state(false);
+  let relayTestResult = $state<"idle" | "testing" | "success" | "error">("idle");
+  let relayTestMessage = $state("");
+  let updateAvailable = $state(false);
+  let updateChecking = $state(false);
+  let updateInstalling = $state(false);
+  let updateError = $state("");
+  let updateMessage = $state("");
+  let pendingUpdate: Update | null = null;
+
+  const RELAY_PATTERN = /^[\w.\-]+:\d{2,5}$/;
 
   const themeOptions: { value: Theme; label: string; icon: typeof Sun }[] = [
     { value: "light", label: "Light", icon: Sun },
@@ -93,6 +104,78 @@
     }
   }
 
+  async function testRelay() {
+    if (relayTestResult === "testing") return;
+    const value = relay.trim();
+    if (!value) {
+      relayTestResult = "idle";
+      relayTestMessage = "";
+      return;
+    }
+    if (!RELAY_PATTERN.test(value)) {
+      relayTestResult = "error";
+      relayTestMessage = "Invalid relay format (host:port)";
+      return;
+    }
+    relayTestResult = "testing";
+    relayTestMessage = "";
+    try {
+      await invoke("test_relay", { relay: value });
+      relayTestResult = "success";
+      relayTestMessage = "Relay is reachable";
+    } catch (e) {
+      relayTestResult = "error";
+      relayTestMessage = String(e).toLowerCase().includes("invalid")
+        ? "Invalid format"
+        : "Could not connect to relay";
+    }
+  }
+
+  function resetRelayTest() {
+    relayTestResult = "idle";
+    relayTestMessage = "";
+  }
+
+  async function checkForUpdates() {
+    if (updateChecking || updateInstalling) return;
+    updateChecking = true;
+    updateError = "";
+    updateMessage = "";
+    updateAvailable = false;
+    pendingUpdate = null;
+    try {
+      const update = await check();
+      if (update) {
+        pendingUpdate = update;
+        updateAvailable = true;
+        updateMessage = `Version ${update.version} is available`;
+      } else {
+        updateMessage = "You are up to date";
+      }
+    } catch (e) {
+      updateError = String(e).toLowerCase().includes("not supported")
+        ? "Updates are not supported on this platform"
+        : "Could not check for updates";
+    } finally {
+      updateChecking = false;
+    }
+  }
+
+  async function installUpdate() {
+    if (!pendingUpdate || updateInstalling) return;
+    updateInstalling = true;
+    updateError = "";
+    try {
+      await pendingUpdate.downloadAndInstall();
+      updateMessage = "Update installed. Restart to apply.";
+      updateAvailable = false;
+    } catch {
+      updateError = "Failed to install the update";
+    } finally {
+      updateInstalling = false;
+    }
+  }
+
   async function pickDir() {
     if (!browser) return;
     try {
@@ -123,18 +206,23 @@
         </div>
       </CardHeader>
       <CardContent>
-        <div class="flex flex-wrap gap-2">
-          {#each themeOptions as { value, label, icon: Icon }}
-            <Button
-              variant={theme === value ? "default" : "outline"}
-              onclick={() => setTheme(value)}
-              class="flex-1 sm:flex-none"
-            >
-              <Icon class="h-4 w-4" />
-              {label}
-            </Button>
-          {/each}
-        </div>
+        <fieldset>
+          <legend class="sr-only">Theme preference</legend>
+          <div class="flex flex-wrap gap-2">
+            {#each themeOptions as { value, label, icon: Icon }}
+              <Button
+                variant={theme === value ? "default" : "outline"}
+                onclick={() => setTheme(value)}
+                class="flex-1 sm:flex-none"
+                aria-label={`${label} theme`}
+                aria-pressed={theme === value}
+              >
+                <Icon class="h-4 w-4" />
+                {label}
+              </Button>
+            {/each}
+          </div>
+        </fieldset>
       </CardContent>
     </Card>
 
@@ -150,8 +238,8 @@
       </CardHeader>
       <CardContent>
         <div class="flex gap-2">
-          <Input bind:value={outputDir} placeholder="Current directory (default)" class="flex-1" />
-          <Button variant="outline" onclick={pickDir} size="icon" title="Browse">
+          <Input bind:value={outputDir} placeholder="Current directory (default)" class="flex-1" aria-label="Output directory path" id="output-dir-input" />
+          <Button variant="outline" onclick={pickDir} size="icon" title="Browse" aria-label="Browse for output directory">
             <FolderOpen class="h-4 w-4" />
           </Button>
         </div>
@@ -171,7 +259,44 @@
       <CardContent class="space-y-3">
         <div class="space-y-2">
           <Label for="relay">Relay Address</Label>
-          <Input id="relay" bind:value={relay} placeholder="Default croc relay" />
+          <div class="flex gap-2">
+            <Input
+              id="relay"
+              bind:value={relay}
+              oninput={resetRelayTest}
+              placeholder="Default croc relay"
+              autocapitalize="none"
+              autocomplete="off"
+              spellcheck="false"
+              class="flex-1"
+            />
+            <Button
+              variant="outline"
+              onclick={testRelay}
+              disabled={relayTestResult === "testing" || !relay.trim()}
+              class="shrink-0"
+              title="Test relay connectivity"
+              aria-busy={relayTestResult === "testing"}
+              aria-label="Test relay connectivity"
+            >
+              {#if relayTestResult === "testing"}
+                <LoaderCircle class="h-4 w-4 animate-spin" />
+              {:else}
+                <Network class="h-4 w-4" />
+              {/if}
+              Test
+            </Button>
+          </div>
+          {#if relayTestMessage}
+            <p
+              class="text-xs {relayTestResult === 'success'
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-destructive'}"
+              aria-live="polite"
+            >
+              {relayTestMessage}
+            </p>
+          {/if}
         </div>
       </CardContent>
     </Card>
@@ -227,6 +352,9 @@
       <Button class="min-w-[120px]" onclick={saveAll}>
         {saved ? "Saved!" : "Save Settings"}
       </Button>
+      {#if saved}
+        <span aria-live="polite" class="text-sm text-green-600 dark:text-green-400">Settings saved successfully</span>
+      {/if}
     </div>
 
     <Card>
@@ -270,6 +398,50 @@
           />
           <span class="text-sm text-muted-foreground">Minimize to tray instead of quitting</span>
         </label>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <div class="flex items-center gap-2">
+          <RefreshCw class="h-5 w-5 text-muted-foreground" />
+          <div>
+            <CardTitle>Updates</CardTitle>
+            <CardDescription>Check for a newer version of croc-gui</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        <div class="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onclick={checkForUpdates}
+            disabled={updateChecking || updateInstalling}
+            class="flex-1 sm:flex-none"
+          >
+            {#if updateChecking}
+              <LoaderCircle class="h-4 w-4 animate-spin" />
+            {:else}
+              <RefreshCw class="h-4 w-4" />
+            {/if}
+            Check for updates
+          </Button>
+          {#if updateAvailable}
+            <Button onclick={installUpdate} disabled={updateInstalling} class="flex-1 sm:flex-none">
+              {#if updateInstalling}
+                <LoaderCircle class="h-4 w-4 animate-spin" />
+              {:else}
+                <Download class="h-4 w-4" />
+              {/if}
+              Install
+            </Button>
+          {/if}
+        </div>
+        {#if updateError}
+          <p class="text-xs text-destructive">{updateError}</p>
+        {:else if updateMessage}
+          <p class="text-xs text-muted-foreground">{updateMessage}</p>
+        {/if}
       </CardContent>
     </Card>
 

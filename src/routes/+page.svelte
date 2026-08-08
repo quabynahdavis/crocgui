@@ -4,7 +4,7 @@
   import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card/index.js";
 </script>
 
-<div class="flex min-h-dvh items-center justify-center p-4 pb-24 sm:pb-4">
+<main class="flex min-h-dvh items-center justify-center p-4 pb-24 sm:pb-4">
   <div class="mx-auto flex w-full max-w-2xl flex-col items-center gap-8 text-center">
     <div class="space-y-2">
       <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">croc-gui</h1>
@@ -14,7 +14,7 @@
     </div>
 
     <div class="grid w-full grid-cols-1 gap-4 sm:grid-cols-1 sm:gap-6 md:grid-cols-2">
-      <a href="/send" class="block">
+      <a href="/send" class="block" aria-label="Send files to another computer using a secret code phrase">
         <Card class="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
           <CardHeader>
             <div class="flex justify-center">
@@ -30,7 +30,7 @@
         </Card>
       </a>
 
-      <a href="/receive" class="block">
+      <a href="/receive" class="block" aria-label="Receive files from another computer by entering their code phrase">
         <Card class="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
           <CardHeader>
             <div class="flex justify-center">
@@ -47,4 +47,4 @@
       </a>
     </div>
   </div>
-</div>
+</main>

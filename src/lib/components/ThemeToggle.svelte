@@ -33,6 +33,7 @@
     className,
   )}
   title="Toggle theme"
+  aria-label={theme === 'light' ? 'Switch to dark theme' : theme === 'dark' ? 'Switch to system theme' : 'Switch to light theme'}
 >
   {#each themes as { value, icon: Icon, label }}
     {#if theme === value}
