@@ -327,6 +327,48 @@ pub fn check_croc_available(app: AppHandle) -> bool {
     check_binary(&app).is_ok()
 }
 
+pub fn parse_relay_addr(relay: &str) -> Result<(String, u16), String> {
+    let trimmed = relay.trim();
+    if trimmed.is_empty() {
+        return Err("Invalid format".into());
+    }
+    let (host, port) = trimmed.rsplit_once(':').ok_or("Invalid format")?;
+    if host.is_empty() {
+        return Err("Invalid format".into());
+    }
+    let port: u16 = port.parse().map_err(|_| "Invalid port")?;
+    if port == 0 {
+        return Err("Invalid port".into());
+    }
+    Ok((host.to_string(), port))
+}
+
+#[tauri::command]
+pub fn test_relay(relay: String) -> Result<(), String> {
+    use std::net::{TcpStream, ToSocketAddrs};
+    use std::time::Duration;
+
+    let (host, port) = parse_relay_addr(&relay)?;
+
+    let addrs: Vec<_> = (host.as_str(), port)
+        .to_socket_addrs()
+        .map_err(|e| format!("Invalid address: {}", e))?
+        .collect();
+
+    if addrs.is_empty() {
+        return Err("Invalid address".into());
+    }
+
+    let mut last_error = String::from("Connection failed");
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, Duration::from_secs(5)) {
+            Ok(_) => return Ok(()),
+            Err(e) => last_error = format!("Connection failed: {}", e),
+        }
+    }
+    Err(last_error)
+}
+
 #[tauri::command]
 pub fn save_temp_text(filename: String, content: String) -> Result<String, String> {
     let sanitized = sanitize_filename(&filename)?;
@@ -445,6 +487,43 @@ mod tests {
         #[test]
         fn rejects_path_with_directory_components() {
             assert!(sanitize_filename("path/to/file.txt").is_err());
+        }
+    }
+
+    mod parse_relay_addr {
+        use super::*;
+
+        #[test]
+        fn parses_host_and_port() {
+            assert_eq!(
+                parse_relay_addr("croc.schuermann.io:9009").unwrap(),
+                ("croc.schuermann.io".to_string(), 9009)
+            );
+        }
+
+        #[test]
+        fn rejects_missing_port() {
+            assert!(parse_relay_addr("croc.schuermann.io").is_err());
+        }
+
+        #[test]
+        fn rejects_empty() {
+            assert!(parse_relay_addr("").is_err());
+        }
+
+        #[test]
+        fn rejects_non_numeric_port() {
+            assert!(parse_relay_addr("host:abc").is_err());
+        }
+
+        #[test]
+        fn rejects_zero_port() {
+            assert!(parse_relay_addr("host:0").is_err());
+        }
+
+        #[test]
+        fn rejects_missing_host() {
+            assert!(parse_relay_addr(":9009").is_err());
         }
     }
 

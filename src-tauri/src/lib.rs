@@ -19,10 +19,12 @@ pub fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec![]),
-        ));
+        builder = builder
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec![]),
+            ))
+            .plugin(tauri_plugin_updater::Builder::new().build());
     }
 
     builder = builder
@@ -115,6 +117,7 @@ pub fn run() {
             croc::cancel_transfer,
             croc::check_croc_available,
             croc::save_temp_text,
+            croc::test_relay,
             config::get_settings,
             config::save_settings,
             history::get_transfer_history,
