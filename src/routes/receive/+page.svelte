@@ -3,7 +3,8 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { page } from "$app/stores";
-  import { ArrowLeft, Download, LoaderCircle, FolderOpen } from "@lucide/svelte";
+  import { ArrowLeft, Download, LoaderCircle, FolderOpen, ClipboardList } from "@lucide/svelte";
+  import { readText } from "@tauri-apps/plugin-clipboard-manager";
   import { loadSettings } from "$lib/settings";
   import { receiveState } from "$lib/stores/receive-state.svelte";
   import Button from "$lib/components/ui/button/button.svelte";
@@ -23,6 +24,16 @@
     const urlCode = $page.url.searchParams.get("code");
     if (urlCode && !receiveState.code) {
       receiveState.code = urlCode.toUpperCase();
+    }
+    if (!receiveState.code) {
+      try {
+        const clip = (await readText())?.trim() ?? "";
+        if (CODE_PATTERN.test(clip)) {
+          receiveState.code = clip.toUpperCase();
+        }
+      } catch {
+        console.warn("clipboard read failed (not in Tauri)");
+      }
     }
     if (!receiveState.outputDir) {
       receiveState.outputDir = (await loadSettings()).outputDir || "";
@@ -71,6 +82,16 @@
     }
   }
 
+  async function pasteCode() {
+    try {
+      const text = (await readText())?.trim() ?? "";
+      if (!text) return;
+      receiveState.code = text.toUpperCase();
+    } catch {
+      console.warn("clipboard read failed (not in Tauri)");
+    }
+  }
+
   async function pickDir() {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
@@ -108,24 +129,33 @@
       {#if !receiveState.transferring && receiveState.status !== "complete"}
         <div class="space-y-2">
           <Label for="code">Code Phrase</Label>
-          <Input
-            id="code"
-            value={receiveState.code}
-            oninput={(e) => {
-              receiveState.code = e.currentTarget.value.toUpperCase();
-            }}
-            placeholder="e.g. 1234-ABCD-5678-EFGH"
-            disabled={receiveState.transferring}
-            autocapitalize="characters"
-            autocomplete="off"
-            spellcheck="false"
-            enterkeyhint="go"
-            inputmode="text"
-            class="h-11 sm:h-9"
-          />
-          {#if receiveState.code.trim() && !isCodeValid}
-            <p class="text-xs text-destructive">Code must look like 1234-ABCD-5678-EFGH</p>
-          {/if}
+          <div class="flex gap-2">
+            <Input
+              id="code"
+              value={receiveState.code}
+              oninput={(e) => {
+                receiveState.code = e.currentTarget.value.toUpperCase();
+              }}
+              placeholder="e.g. 1234-ABCD-5678-EFGH"
+              disabled={receiveState.transferring}
+              autocapitalize="characters"
+              autocomplete="off"
+              spellcheck="false"
+              enterkeyhint="go"
+              inputmode="text"
+              class="h-11 flex-1 sm:h-9"
+              aria-describedby="code-hint"
+              aria-invalid={!isCodeValid && receiveState.code.trim()}
+            />
+            <Button variant="outline" size="icon" onclick={pasteCode} disabled={receiveState.transferring} class="h-11 w-11 shrink-0 sm:h-9 sm:w-9" title="Paste">
+              <ClipboardList class="h-4 w-4" />
+            </Button>
+          </div>
+           {#if receiveState.code.trim() && !isCodeValid}
+             <p class="text-xs text-destructive" id="code-hint" role="alert">Code must look like 1234-ABCD-5678-EFGH</p>
+           {:else}
+             <p class="sr-only" id="code-hint">Enter the code phrase from the sender, format: 4 groups of 4 characters separated by dashes</p>
+           {/if}
         </div>
         <div class="space-y-2">
           <Label for="output-dir">Save to</Label>
@@ -149,14 +179,16 @@
       {/if}
 
       {#if receiveState.transferring}
-        <Progress value={receiveState.progressPercent} class="w-full" />
+        <div aria-live="polite">
+          <Progress value={receiveState.progressPercent} class="w-full" />
+        </div>
         <Button variant="destructive" class="w-full" onclick={cancel}>
           Cancel
         </Button>
       {/if}
 
       {#if receiveState.status === "complete"}
-        <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
+        <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400" aria-live="polite">
           Transfer complete! Files have been saved.
         </div>
         <Button variant="outline" class="w-full" onclick={() => { receiveState.status = ""; receiveState.code = ""; receiveState.progressLog = []; }}>
@@ -165,7 +197,7 @@
       {/if}
 
       {#if receiveState.status && receiveState.status !== "complete" && !receiveState.transferring && receiveState.status !== "starting"}
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400" role="alert">
           {receiveState.status}
         </div>
       {/if}
