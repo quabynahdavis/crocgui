@@ -4,11 +4,12 @@
   import { listen } from "@tauri-apps/api/event";
   import {
     ArrowLeft, Send, Download, Check, X, Clock, LoaderCircle,
-    Trash2, Ban, Pin, PinOff,
+    Trash2, Ban, Pin, PinOff, Search, Inbox,
   } from "@lucide/svelte";
   import { Tabs, TabsList, TabsTrigger, TabsContent } from "$lib/components/ui/tabs/index.js";
   import Button from "$lib/components/ui/button/button.svelte";
   import Card, { CardContent } from "$lib/components/ui/card/index.js";
+  import Input from "$lib/components/ui/input/input.svelte";
 
   interface TransferRecord {
     id: string;
@@ -24,10 +25,42 @@
 
   let transfers = $state<TransferRecord[]>([]);
   let loading = $state(true);
+  let searchQuery = $state('');
 
   // delete confirmation state
   let deleteTarget = $state<TransferRecord | null>(null);
   let deleting = $state(false);
+  let dialogRef: HTMLDivElement | null = null;
+
+  $effect(() => {
+    if (deleteTarget && dialogRef) {
+      requestAnimationFrame(() => {
+        const firstBtn = dialogRef?.querySelector<HTMLElement>('button:not([disabled])');
+        firstBtn?.focus();
+      });
+    }
+  });
+
+  function trapFocus(e: KeyboardEvent) {
+    if (!dialogRef) return;
+    const focusable = dialogRef.querySelectorAll<HTMLElement>('button:not([disabled])');
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.key === 'Tab') {
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+  }
 
   let unlisten: (() => void)[] = [];
 
@@ -129,14 +162,26 @@
     return parts[parts.length - 1];
   }
 
+  function matchesSearch(tx: TransferRecord, query: string): boolean {
+    const q = query.toLowerCase();
+    if (!q) return true;
+    if (tx.code?.toLowerCase().includes(q)) return true;
+    if (tx.status.toLowerCase().includes(q)) return true;
+    if (tx.files.some((f) => fileName(f).toLowerCase().includes(q))) return true;
+    if (formatTime(tx.started_at).toLowerCase().includes(q)) return true;
+    if (tx.completed_at && formatTime(tx.completed_at).toLowerCase().includes(q)) return true;
+    return false;
+  }
+
   let sorted = $derived(
     [...transfers].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return Number(b.started_at) - Number(a.started_at);
     }),
   );
-  let sent = $derived(sorted.filter((t) => t.direction === "send"));
-  let received = $derived(sorted.filter((t) => t.direction === "receive"));
+  let filtered = $derived(sorted.filter((t) => matchesSearch(t, searchQuery)));
+  let sent = $derived(filtered.filter((t) => t.direction === "send"));
+  let received = $derived(filtered.filter((t) => t.direction === "receive"));
   let hasActive = $derived(transfers.some((t) => t.status === "in_progress"));
 </script>
 
@@ -156,17 +201,19 @@
 
   <h1 class="mb-6 text-2xl font-bold tracking-tight">Transfer History</h1>
 
-  {#if loading}
-    <div class="flex justify-center py-12">
-      <LoaderCircle class="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  {:else if transfers.length === 0}
-    <div class="py-12 text-center text-sm text-muted-foreground">
-      No transfers yet.
-    </div>
-  {:else}
-    {#snippet transferCard(tx: TransferRecord, showFiles: boolean)}
-      <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""}>
+   {#if loading}
+     <div class="flex justify-center py-12">
+       <LoaderCircle class="h-6 w-6 animate-spin text-muted-foreground" />
+     </div>
+   {:else if transfers.length === 0}
+     <div class="flex flex-col items-center justify-center py-16 text-center">
+       <Inbox class="h-12 w-12 text-muted-foreground/50" />
+       <p class="mt-4 text-sm text-muted-foreground">No transfers yet.</p>
+       <p class="mt-1 text-xs text-muted-foreground/60">Your transfers will appear here</p>
+     </div>
+   {:else}
+     {#snippet transferCard(tx: TransferRecord, showFiles: boolean)}
+       <Card class={tx.status === "in_progress" ? "ring-2 ring-blue-500/30" : tx.pinned ? "ring-1 ring-amber-400/40" : ""} aria-label={tx.status.replace('_', ' ') + " " + (tx.direction === "send" ? "sent" : "received") + " transfer" + (tx.code ? " with code " + tx.code : "") + ", started " + formatTime(tx.started_at)}>
         <CardContent class="flex items-start gap-3 p-3">
           <div class="mt-0.5 shrink-0">
             {#if tx.status === "in_progress"}
@@ -216,6 +263,7 @@
                 onclick={() => togglePin(tx.id, tx.pinned)}
                 class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-amber-500"
                 title={tx.pinned ? "Unpin" : "Pin"}
+                aria-label={(tx.pinned ? "Unpin" : "Pin") + " transfer: " + tx.status + " " + (tx.direction === "send" ? "sent" : "received") + " transfer" + (tx.code ? " with code " + tx.code : "")}
               >
                 {#if tx.pinned}
                   <PinOff class="h-4 w-4" />
@@ -227,6 +275,7 @@
                 onclick={() => confirmDelete(tx)}
                 class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 title="Delete"
+                aria-label={"Delete transfer: " + tx.status + " " + (tx.direction === "send" ? "sent" : "received") + " transfer" + (tx.code ? " with code " + tx.code : "")}
               >
                 <Trash2 class="h-4 w-4" />
               </button>
@@ -235,6 +284,7 @@
                 onclick={cancelTransfer}
                 class="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 title="Cancel"
+                aria-label="Cancel in-progress transfer"
               >
                 <Ban class="h-4 w-4" />
               </button>
@@ -243,30 +293,51 @@
         </CardContent>
       </Card>
     {/snippet}
-    <Tabs value="sent">
-      <TabsList class="w-full">
-        <TabsTrigger value="sent" class="flex-1 gap-1.5">
-          <Send class="h-4 w-4" />
-          Sent
-          <span class="ml-auto text-xs tabular-nums opacity-60">{sent.length}</span>
-        </TabsTrigger>
-        <TabsTrigger value="received" class="flex-1 gap-1.5">
-          <Download class="h-4 w-4" />
-          Received
-          <span class="ml-auto text-xs tabular-nums opacity-60">{received.length}</span>
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="sent" class="space-y-2">
-        {#each sent as tx (tx.id)}
-          {@render transferCard(tx, true)}
-        {/each}
-      </TabsContent>
-      <TabsContent value="received" class="space-y-2">
-        {#each received as tx (tx.id)}
-          {@render transferCard(tx, false)}
-        {/each}
-      </TabsContent>
-    </Tabs>
+    <div class="relative mb-4">
+      <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+      <Input
+        bind:value={searchQuery}
+        placeholder="Search transfers..."
+        aria-label="Search transfers by code, file name, or status"
+        class="pl-9"
+      />
+    </div>
+
+    {#if searchQuery && filtered.length === 0}
+      <div class="flex flex-col items-center justify-center py-16 text-center">
+        <Search class="h-12 w-12 text-muted-foreground/50" />
+        <p class="mt-4 text-sm text-muted-foreground">No transfers match your search.</p>
+        <p class="mt-1 text-xs text-muted-foreground/60">0 of {transfers.length} transfers</p>
+      </div>
+    {:else}
+      {#if searchQuery}
+        <p class="mb-3 text-xs text-muted-foreground">{filtered.length} of {transfers.length} transfers</p>
+      {/if}
+      <Tabs value="sent">
+        <TabsList class="w-full">
+          <TabsTrigger value="sent" class="flex-1 gap-1.5">
+            <Send class="h-4 w-4" />
+            Sent
+            <span class="ml-auto text-xs tabular-nums opacity-60">{sent.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="received" class="flex-1 gap-1.5">
+            <Download class="h-4 w-4" />
+            Received
+            <span class="ml-auto text-xs tabular-nums opacity-60">{received.length}</span>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="sent" class="space-y-2" aria-live="polite">
+          {#each sent as tx (tx.id)}
+            {@render transferCard(tx, true)}
+          {/each}
+        </TabsContent>
+        <TabsContent value="received" class="space-y-2" aria-live="polite">
+          {#each received as tx (tx.id)}
+            {@render transferCard(tx, false)}
+          {/each}
+        </TabsContent>
+      </Tabs>
+    {/if}
   {/if}
 </div>
 
@@ -275,16 +346,19 @@
   <div
     class="fixed inset-0 z-50 flex items-end justify-center bg-black/50 pb-12 sm:items-center sm:pb-0"
     onclick={cancelDelete}
-    onkeydown={(e) => e.key === "Escape" && cancelDelete()}
-    role="dialog"
+    onkeydown={(e) => { trapFocus(e); if (e.key === "Escape") cancelDelete(); }}
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="delete-dialog-title"
     tabindex="-1"
+    bind:this={dialogRef}
   >
     <div
       class="w-full rounded-t-xl bg-background p-6 shadow-lg sm:max-w-sm sm:rounded-xl"
       onclick={(e) => e.stopPropagation()}
       role="presentation"
     >
-      <h3 class="mb-2 text-lg font-semibold">Delete transfer record?</h3>
+      <h3 class="mb-2 text-lg font-semibold" id="delete-dialog-title">Delete transfer record?</h3>
       <p class="mb-1 text-sm text-muted-foreground">
         {deleteTarget.direction === "send" ? "Sent" : "Received"}
         &middot; {deleteTarget.code ?? "no code"}
