@@ -13,7 +13,7 @@
       </p>
     </div>
 
-    <div class="grid w-full gap-4 sm:gap-6 sm:grid-cols-2">
+    <div class="grid w-full grid-cols-1 gap-4 sm:grid-cols-1 sm:gap-6 md:grid-cols-2">
       <a href="/send" class="block">
         <Card class="cursor-pointer transition-all hover:border-primary hover:shadow-lg">
           <CardHeader>

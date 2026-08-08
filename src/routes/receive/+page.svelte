@@ -116,6 +116,11 @@
             }}
             placeholder="e.g. 1234-ABCD-5678-EFGH"
             disabled={receiveState.transferring}
+            autocapitalize="characters"
+            autocomplete="off"
+            spellcheck="false"
+            enterkeyhint="go"
+            inputmode="text"
             class="h-11 sm:h-9"
           />
           {#if receiveState.code.trim() && !isCodeValid}

@@ -128,6 +128,17 @@
 	html {
 		@apply font-sans;
 	}
+
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
+	}
 }
 
 /* Mobile-friendly adjustments */
@@ -138,7 +149,16 @@
 	body {
 		overscroll-behavior: contain;
 	}
-	button, a, input, select, textarea {
+  button, a, input, select, textarea {
 		touch-action: manipulation;
+	}
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+	.mobile-bottom-nav {
+		display: none;
+	}
+	main.pb-20 {
+		padding-bottom: 1rem !important;
 	}
 }

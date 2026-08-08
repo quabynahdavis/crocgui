@@ -40,7 +40,7 @@
 
 <!-- Desktop top nav -->
 <nav class="sticky top-0 z-50 hidden border-b bg-background/80 backdrop-blur-sm sm:block">
-  <div class="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4">
+    <div class="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 md:gap-6 md:px-6">
     <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
       <Send class="h-5 w-5 text-primary" />
       <span>croc-gui</span>
@@ -81,7 +81,7 @@
 </main>
 
 <!-- Mobile bottom nav -->
-<nav class="fixed bottom-0 z-50 grid w-full grid-cols-4 border-t bg-background/90 backdrop-blur-lg sm:hidden" style="padding-bottom: env(safe-area-inset-bottom, 0px);">
+<nav class="mobile-bottom-nav fixed bottom-0 z-50 grid w-full grid-cols-4 border-t bg-background md:bg-background/90 md:backdrop-blur-lg sm:hidden" style="padding-bottom: env(safe-area-inset-bottom, 0px);">
   {#each links as { href, label, icon: Icon }}
     <a
       href={href}
