@@ -28,9 +28,31 @@ impl Default for Settings {
     }
 }
 
+pub struct SettingsState {
+    pub settings: std::sync::Mutex<Option<Settings>>,
+}
+
+impl SettingsState {
+    pub fn new() -> Self {
+        Self {
+            settings: std::sync::Mutex::new(None),
+        }
+    }
+}
+
 pub fn read_settings(app: &AppHandle) -> Settings {
-    let path = config_path(app);
-    read_settings_from_path(&path)
+    cached_settings(app)
+}
+
+fn cached_settings(app: &AppHandle) -> Settings {
+    let state = app.state::<SettingsState>();
+    let mut guard = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(settings) = guard.as_ref() {
+        return settings.clone();
+    }
+    let settings = read_settings_from_path(&config_path(app));
+    *guard = Some(settings.clone());
+    settings
 }
 
 pub fn read_settings_from_path(path: &PathBuf) -> Settings {
@@ -46,7 +68,7 @@ fn config_path(app: &AppHandle) -> PathBuf {
     let dir = match app.path().app_config_dir() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Failed to get config dir, using temp dir: {}", e);
+            log::warn!("Failed to get config dir, using temp dir: {}", e);
             std::env::temp_dir().join("croc-gui")
         }
     };
@@ -55,19 +77,17 @@ fn config_path(app: &AppHandle) -> PathBuf {
 
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Settings {
-    let path = config_path(&app);
-    if let Ok(data) = fs::read_to_string(&path) {
-        if let Ok(settings) = serde_json::from_str(&data) {
-            return settings;
-        }
-    }
-    Settings::default()
+    cached_settings(&app)
 }
 
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     let path = config_path(&app);
-    save_settings_to_path(&path, settings)
+    save_settings_to_path(&path, settings.clone())?;
+    let state = app.state::<SettingsState>();
+    let mut guard = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = Some(settings);
+    Ok(())
 }
 
 pub fn save_settings_to_path(path: &PathBuf, settings: Settings) -> Result<(), String> {
@@ -222,6 +242,28 @@ mod tests {
             assert!(json.contains("\"disable_compression\""));
             assert!(json.contains("\"output_dir\""));
             assert!(json.contains("\"minimize_to_tray\""));
+        }
+    }
+
+    mod settings_state {
+        use super::*;
+
+        #[test]
+        fn new_starts_unpopulated() {
+            let state = SettingsState::new();
+            let guard = state.settings.lock().unwrap();
+            assert!(guard.is_none());
+        }
+
+        #[test]
+        fn cache_can_be_populated() {
+            let state = SettingsState::new();
+            {
+                let mut guard = state.settings.lock().unwrap();
+                *guard = Some(Settings::default());
+            }
+            let guard = state.settings.lock().unwrap();
+            assert_eq!(*guard, Some(Settings::default()));
         }
     }
 }

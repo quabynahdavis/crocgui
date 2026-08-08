@@ -52,6 +52,32 @@ impl TransferHistory {
     }
 }
 
+pub struct HistoryState {
+    pub history: std::sync::Mutex<TransferHistory>,
+}
+
+impl HistoryState {
+    pub fn new() -> Self {
+        Self {
+            history: std::sync::Mutex::new(TransferHistory::new()),
+        }
+    }
+}
+
+fn lock_history(app: &AppHandle) -> std::sync::MutexGuard<'_, TransferHistory> {
+    let inner = app.state::<HistoryState>().inner();
+    let mut guard = inner.history.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.transfers.is_empty() {
+        if let Ok(path) = history_path(app) {
+            let loaded = load_history_from_path(&path);
+            if !loaded.transfers.is_empty() {
+                *guard = loaded;
+            }
+        }
+    }
+    guard
+}
+
 fn history_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -61,11 +87,7 @@ fn history_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 pub fn load_history(app: &AppHandle) -> TransferHistory {
-    let path = match history_path(app) {
-        Ok(p) => p,
-        Err(_) => return TransferHistory::new(),
-    };
-    load_history_from_path(&path)
+    lock_history(app).clone()
 }
 
 pub fn load_history_from_path(path: &Path) -> TransferHistory {
@@ -95,13 +117,14 @@ pub fn save_history_to_path(path: &Path, history: &TransferHistory) {
 }
 
 pub fn add_record(app: &AppHandle, record: TransferRecord) {
-    let mut history = load_history(app);
+    let mut history = lock_history(app);
+    log::info!("History record added (id: {})", record.id);
     history.transfers.push(record);
     save_history(app, &history);
 }
 
 pub fn update_status(app: &AppHandle, id: &str, new_status: TransferStatus, error: Option<String>) {
-    let mut history = load_history(app);
+    let mut history = lock_history(app);
     if let Some(record) = history.transfers.iter_mut().find(|r| r.id == id) {
         let terminal = new_status.is_terminal();
         record.status = new_status;
@@ -114,7 +137,7 @@ pub fn update_status(app: &AppHandle, id: &str, new_status: TransferStatus, erro
 }
 
 pub fn update_record_code(app: &AppHandle, id: &str, code: &str) {
-    let mut history = load_history(app);
+    let mut history = lock_history(app);
     if let Some(record) = history.transfers.iter_mut().find(|r| r.id == id) {
         record.code = Some(code.to_string());
     }
@@ -148,18 +171,20 @@ pub fn now_timestamp() -> String {
 
 #[tauri::command]
 pub fn get_transfer_history(app: AppHandle) -> TransferHistory {
-    load_history(&app)
+    lock_history(&app).clone()
 }
 
 #[tauri::command]
 pub fn clear_transfer_history(app: AppHandle) -> Result<(), String> {
-    save_history(&app, &TransferHistory::new());
+    let mut history = lock_history(&app);
+    history.transfers.clear();
+    save_history(&app, &history);
     Ok(())
 }
 
 #[tauri::command]
 pub fn set_record_pinned(app: AppHandle, id: String, pinned: bool) -> Result<(), String> {
-    let mut history = load_history(&app);
+    let mut history = lock_history(&app);
     if let Some(record) = history.transfers.iter_mut().find(|r| r.id == id) {
         record.pinned = pinned;
         save_history(&app, &history);
@@ -171,7 +196,7 @@ pub fn set_record_pinned(app: AppHandle, id: String, pinned: bool) -> Result<(),
 
 #[tauri::command]
 pub fn delete_transfer_record(app: AppHandle, id: String) -> Result<(), String> {
-    let mut history = load_history(&app);
+    let mut history = lock_history(&app);
     let len = history.transfers.len();
     history.transfers.retain(|r| r.id != id);
     if history.transfers.len() < len {
@@ -184,8 +209,15 @@ pub fn delete_transfer_record(app: AppHandle, id: String) -> Result<(), String> 
 
 #[tauri::command]
 pub fn delete_record_files(app: AppHandle, id: String) -> Result<(), String> {
-    let history = load_history(&app);
-    let record = history.transfers.iter().find(|r| r.id == id).ok_or("Record not found")?;
+    let record = {
+        let history = lock_history(&app);
+        history
+            .transfers
+            .iter()
+            .find(|r| r.id == id)
+            .cloned()
+            .ok_or("Record not found")?
+    };
     if !matches!(record.direction, TransferDirection::Send) {
         return Err("Can only delete files for sent transfers".into());
     }
@@ -410,6 +442,31 @@ mod tests {
         fn new_creates_empty() {
             let h = TransferHistory::new();
             assert_eq!(h.transfers.len(), 0);
+        }
+    }
+
+    mod history_state {
+        use super::*;
+
+        #[test]
+        fn new_creates_empty_history() {
+            let state = HistoryState::new();
+            let guard = state.history.lock().unwrap();
+            assert_eq!(guard.transfers.len(), 0);
+        }
+
+        #[test]
+        fn mutation_under_lock_persists() {
+            let state = HistoryState::new();
+            {
+                let mut guard = state.history.lock().unwrap();
+                guard
+                    .transfers
+                    .push(make_record("tx1", TransferDirection::Send));
+            }
+            let guard = state.history.lock().unwrap();
+            assert_eq!(guard.transfers.len(), 1);
+            assert_eq!(guard.transfers[0].id, "tx1");
         }
     }
 }

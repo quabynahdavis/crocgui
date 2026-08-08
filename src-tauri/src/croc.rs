@@ -115,6 +115,7 @@ fn spawn_and_monitor(
         let mut child = match cmd.stderr(Stdio::piped()).stdout(Stdio::null()).spawn() {
             Ok(c) => c,
             Err(e) => {
+                log::error!("Failed to spawn croc: {}", e);
                 if let Some(id) = &history_id {
                     history::update_status(&app, id, history::TransferStatus::Failed, Some(format!("Failed to start croc: {}", e)));
                 }
@@ -123,6 +124,7 @@ fn spawn_and_monitor(
                 return;
             }
         };
+        log::info!("croc process spawned (pid: {})", child.id());
 
         if let Ok(mut p) = app.state::<CrocState>().pid.lock() {
             *p = Some(child.id());
@@ -161,6 +163,7 @@ fn spawn_and_monitor(
                 if let Some(id) = &history_id {
                     history::update_status(&app, id, history::TransferStatus::Completed, None);
                 }
+                log::info!("Transfer completed (id: {:?})", history_id);
                 let _ = app.emit(complete_event, if code_event { code } else { String::new() });
                 push_notification(&app, "croc-gui", "Transfer complete!");
             }
@@ -173,6 +176,9 @@ fn spawn_and_monitor(
                         .map(|r| r.status.clone());
                     if record != Some(history::TransferStatus::Cancelled) {
                         history::update_status(&app, id, history::TransferStatus::Failed, Some("Transfer failed".into()));
+                        log::error!("Transfer failed (id: {:?})", history_id);
+                    } else {
+                        log::warn!("Transfer cancelled (id: {:?})", history_id);
                     }
                 }
                 let _ = app.emit("croc-error", "Transfer failed or cancelled");
@@ -297,6 +303,7 @@ pub fn cancel_transfer(app: AppHandle) -> Result<(), String> {
         history::update_status(&app, &hid, history::TransferStatus::Cancelled, Some("Cancelled by user".into()));
     }
     if let Some(pid) = pid {
+        log::info!("Cancelling transfer (pid: {})", pid);
         #[cfg(unix)]
         {
             let _ = Command::new("kill")
