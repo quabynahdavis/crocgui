@@ -2,6 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import path from "path";
+import { configDefaults } from "vitest/config";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -25,5 +26,15 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"]
     }
   },
-  resolve: { alias: { $lib: path.resolve("./src/lib") } }
+  resolve: { alias: { $lib: path.resolve("./src/lib") } },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.{test,spec}.{js,ts,svelte}"],
+    exclude: [...(configDefaults.exclude || []), "e2e/*"],
+    globals: true,
+    alias: [
+      { find: /^svelte$/, replacement: path.resolve("./node_modules/svelte/src/index-client.js") },
+    ],
+  },
 }));
