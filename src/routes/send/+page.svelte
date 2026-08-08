@@ -7,6 +7,7 @@
     ArrowLeft, Upload, Copy, Check, File, X, Folder,
     ClipboardList, StickyNote, Eye,
   } from "@lucide/svelte";
+  import QRCode from "qrcode";
   import { loadSettings } from "$lib/settings";
   import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { sendState } from "$lib/stores/send-state.svelte";
@@ -16,8 +17,26 @@
   import Progress from "$lib/components/ui/progress/progress.svelte";
 
   let previewTarget = $state<SendItem | null>(null);
+  let dragActive = $state(false);
+  let qrUrl = $state("");
 
   let copied = $state(false);
+
+  $effect(() => {
+    const code = sendState.code;
+    if (code) {
+      QRCode.toDataURL(code).then(url => qrUrl = url).catch(() => qrUrl = "");
+    } else {
+      qrUrl = "";
+    }
+  });
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
 
   let unlisten: (() => void)[] = [];
 
@@ -75,6 +94,26 @@
     const result = await open({ directory: true, multiple: false });
     if (result) {
       sendState.items = [...sendState.items, { type: "folder" as SendMode, path: result, label: labelFromPath(result) }];
+    }
+  }
+
+  function onDragOver(e: DragEvent) {
+    e.preventDefault();
+    dragActive = true;
+  }
+
+  function onDragLeave(e: DragEvent) {
+    e.preventDefault();
+    dragActive = false;
+  }
+
+  function onDrop(e: DragEvent) {
+    e.preventDefault();
+    dragActive = false;
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      sendState.items = [...sendState.items, { type: "file" as SendMode, path: file.name, label: file.name, sizeBytes: file.size }];
     }
   }
 
@@ -193,6 +232,15 @@
   </a>
 
   <div class="flex flex-1 flex-col justify-center">
+  <div
+    class="relative"
+    role="region"
+    aria-label="File drop zone"
+    aria-dropeffect="copy"
+    ondragover={onDragOver}
+    ondragleave={onDragLeave}
+    ondrop={onDrop}
+  >
   <Card>
     <CardHeader>
       <CardTitle>Send Files</CardTitle>
@@ -201,11 +249,13 @@
     <CardContent class="space-y-4">
       {#if !sendState.transferring && sendState.status !== "complete"}
         <!-- Mode selector -->
-        <div class="flex gap-1 rounded-lg bg-muted p-1">
+        <div class="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Transfer mode selector">
           {#each modes as { value, label, icon: Icon }}
             <button
               onclick={() => (sendState.mode = value)}
               class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm {sendState.mode === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+              aria-label={`${label} mode`}
+              aria-pressed={sendState.mode === value}
             >
               <Icon class="h-4 w-4" />
               <span class="hidden sm:inline">{label}</span>
@@ -215,6 +265,7 @@
 
         <!-- Mode input -->
         {#if sendState.mode === "file"}
+          <p class="text-center text-xs text-muted-foreground">Drag files here, or use the button below.</p>
           <Button variant="outline" class="w-full" onclick={pickFiles}>
             <Upload class="h-4 w-4" />
             {sendState.items.filter((i) => i.type === "file").length > 0 ? "Add More Files" : "Choose Files"}
@@ -222,6 +273,7 @@
         {/if}
 
         {#if sendState.mode === "folder"}
+          <p class="text-center text-xs text-muted-foreground">Drag files here, or use the button below.</p>
           <Button variant="outline" class="w-full" onclick={pickFolder}>
             <Folder class="h-4 w-4" />
             {sendState.items.filter((i) => i.type === "folder").length > 0 ? "Choose Another Folder" : "Choose Folder"}
@@ -268,6 +320,9 @@
                   <File class="h-4 w-4 shrink-0 text-muted-foreground" />
                 {/if}
                 <span class="min-w-0 flex-1 truncate">{item.label}</span>
+                {#if item.sizeBytes != null}
+                  <span class="shrink-0 text-xs text-muted-foreground">{formatSize(item.sizeBytes)}</span>
+                {/if}
                 {#if item.type === "text" || item.type === "clipboard"}
                   <button
                     onclick={() => openPreview(item)}
@@ -280,7 +335,7 @@
                 <button
                   onclick={() => removeItem(i)}
                   class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Remove"
+                  aria-label="Remove {item.label}"
                 >
                   <X class="h-3.5 w-3.5" />
                 </button>
@@ -295,16 +350,17 @@
       {/if}
 
       {#if sendState.code}
-        <div class="rounded-lg border bg-muted/50 p-4 text-center">
-          <p class="mb-2 text-sm text-muted-foreground">Share this code with the recipient:</p>
+        <div class="rounded-lg border bg-muted/50 p-4 text-center" aria-live="polite">
+          <p class="mb-2 text-sm text-muted-foreground" id="code-instruction">Share this code with the recipient:</p>
           <div class="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <button
               class="w-full break-all rounded bg-primary/10 px-4 py-3 text-lg font-bold tracking-wider text-primary sm:select-all sm:w-auto"
               onclick={copyCode}
+              aria-describedby="code-instruction"
             >
               {sendState.code}
             </button>
-            <Button size="icon" variant="ghost" onclick={copyCode} title="Copy code">
+            <Button size="icon" variant="ghost" onclick={copyCode} title="Copy code" aria-label="Copy code to clipboard">
               {#if copied}
                 <Check class="h-4 w-4 text-green-500" />
               {:else}
@@ -312,6 +368,12 @@
               {/if}
             </Button>
           </div>
+          {#if qrUrl}
+            <div class="mt-4 flex flex-col items-center gap-2">
+              <p class="text-xs text-muted-foreground">Scan to receive</p>
+              <img src={qrUrl} alt="QR code" class="max-w-[200px] rounded bg-white p-2" />
+            </div>
+          {/if}
           {#if copied}
             <p class="mt-2 text-xs text-green-600 dark:text-green-400">Copied!</p>
           {/if}
@@ -319,14 +381,16 @@
       {/if}
 
       {#if sendState.transferring}
-        <Progress value={sendState.progressPercent} class="w-full" />
+        <div aria-live="polite">
+          <Progress value={sendState.progressPercent} class="w-full" />
+        </div>
         <Button variant="destructive" class="w-full" onclick={cancel}>
           Cancel
         </Button>
       {/if}
 
       {#if sendState.status === "complete"}
-        <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
+        <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-center text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400" aria-live="polite">
           Transfer complete!
         </div>
         <Button variant="outline" class="w-full" onclick={() => { sendState.reset(); }}>
@@ -335,7 +399,7 @@
       {/if}
 
       {#if sendState.status && sendState.status !== "complete" && !sendState.transferring && sendState.status !== "starting"}
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400" role="alert">
           {sendState.status}
         </div>
       {/if}
@@ -351,6 +415,13 @@
       {/if}
     </CardContent>
   </Card>
+  {#if dragActive}
+    <div class="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-sm">
+      <Upload class="mb-2 h-10 w-10 text-primary" />
+      <p class="text-sm font-medium text-primary">Drop files here</p>
+    </div>
+  {/if}
+  </div>
   </div>
 </div>
 

@@ -5,6 +5,7 @@ export interface SendItem {
   path: string;
   label: string;
   preview?: string;
+  sizeBytes?: number;
 }
 
 class SendState {
