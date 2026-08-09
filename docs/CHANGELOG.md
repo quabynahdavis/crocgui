@@ -19,3 +19,6 @@ changes are recorded in the `CHANGELOG.md` of the relevant subdirectory.
 ### Added
 - Documentation for Linux native window decorations fix (removing custom GTK titlebar to show window icon in titlebar).
 - Added `gtk` and `gdk-pixbuf` dependencies for Linux window icon setup.
+
+### Changed
+- `README.md`: complete rewrite to match professional open-source style with badges, "Why" section, "How it Works", Quick Start, Platform Support, Security, Testing, Roadmap, and Contributing sections.
