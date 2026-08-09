@@ -47,7 +47,7 @@
 <nav class="sticky top-0 z-50 hidden border-b bg-background/80 backdrop-blur-sm sm:block" aria-label="Main navigation">
     <div class="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 md:gap-6 md:px-6">
     <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
-      <Send class="h-5 w-5 text-primary" />
+      <img src="/crocodile-128.png" alt="" class="h-6 w-6 opacity-80" />
       <span>croc-gui</span>
     </a>
 
@@ -73,7 +73,7 @@
 <!-- Mobile top bar (logo + theme only) -->
 <nav class="sticky top-0 z-50 flex h-12 items-center border-b bg-background/80 px-4 backdrop-blur-sm sm:hidden">
   <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
-    <Send class="h-5 w-5 text-primary" />
+    <img src="/crocodile-128.png" alt="" class="h-6 w-6 opacity-80" />
     <span class="text-sm">croc-gui</span>
   </a>
   <div class="ml-auto">

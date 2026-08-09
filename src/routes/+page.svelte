@@ -7,6 +7,7 @@
 <main class="flex min-h-dvh items-center justify-center p-4 pb-24 sm:pb-4">
   <div class="mx-auto flex w-full max-w-2xl flex-col items-center gap-8 text-center">
     <div class="space-y-2">
+      <img src="/crocodile-128.png" alt="Crocodile mascot" class="mx-auto h-20 w-20 opacity-90 sm:h-24 sm:w-24" />
       <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">croc-gui</h1>
       <p class="text-base text-muted-foreground sm:text-lg">
         Securely transfer files between computers using the croc CLI
