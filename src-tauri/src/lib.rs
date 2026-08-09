@@ -29,69 +29,88 @@ pub fn run() {
 
     builder = builder
         .setup(|app| {
-            #[cfg(desktop)]
-            {
-                use tauri::menu::{MenuBuilder, MenuItemBuilder};
-                use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+#[cfg(desktop)]
+{
+    use tauri::menu::{MenuBuilder, MenuItemBuilder};
+    use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 
-                let show = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
-                let send = MenuItemBuilder::with_id("send", "Send Files").build(app)?;
-                let receive = MenuItemBuilder::with_id("receive", "Receive Files").build(app)?;
-                let settings_item = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "Quit croc-gui").build(app)?;
-                let menu = MenuBuilder::new(app)
-                    .item(&show)
-                    .separator()
-                    .item(&send)
-                    .item(&receive)
-                    .separator()
-                    .item(&settings_item)
-                    .separator()
-                    .item(&quit)
-                    .build()?;
+    let show = MenuItemBuilder::with_id("show", "Show Window").build(app)?;
+    let send = MenuItemBuilder::with_id("send", "Send Files").build(app)?;
+    let receive = MenuItemBuilder::with_id("receive", "Receive Files").build(app)?;
+    let settings_item = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit croc-gui").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&show)
+        .separator()
+        .item(&send)
+        .item(&receive)
+        .separator()
+        .item(&settings_item)
+        .separator()
+        .item(&quit)
+        .build()?;
 
-                let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                    .expect("Failed to load tray icon");
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+        .expect("Failed to load tray icon");
 
-                let tray = TrayIconBuilder::with_id("main-tray")
-                    .icon(icon)
-                    .menu(&menu)
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        route @ ("send" | "receive" | "settings") => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                log::info!("Tray: navigating to /{}", route);
-                                let _ = window.emit("navigate", format!("/{route}"));
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
-                    })
-                    .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click { .. } = event {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                if window.is_visible().ok().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                            }
-                        }
-                    })
-                    .build(app)?;
-
-                drop(tray);
+    let tray = TrayIconBuilder::with_id("main-tray")
+        .icon(icon)
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
             }
+            route @ ("send" | "receive" | "settings") => {
+                if let Some(window) = app.get_webview_window("main") {
+                    log::info!("Tray: navigating to /{}", route);
+                    let _ = window.emit("navigate", format!("/{route}"));
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { .. } = event {
+                if let Some(window) = tray.app_handle().get_webview_window("main") {
+                    if window.is_visible().ok().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        })
+        .build(app)?;
+
+    drop(tray);
+}
+
+#[cfg(desktop)]
+{
+    use tauri::Manager;
+    use gtk::prelude::GtkWindowExt;
+    #[cfg(target_os = "linux")]
+    {
+        let window = app.get_webview_window("main").unwrap();
+        let gtk_window = window.gtk_window().unwrap();
+
+        // Set the app icon in the titlebar on Linux
+        if let Ok(pixbuf) = gtk::gdk_pixbuf::Pixbuf::from_file("icons/32x32.png") {
+            gtk_window.set_icon(Some(&pixbuf));
+        }
+
+        // Remove the custom GTK titlebar to use native decorations
+        gtk_window.set_titlebar(None::<&gtk::Widget>);
+    }
+}
 
             Ok(())
         });
