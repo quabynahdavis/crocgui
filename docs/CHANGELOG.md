@@ -13,3 +13,9 @@ changes are recorded in the `CHANGELOG.md` of the relevant subdirectory.
   each directory and the sequential numbering scheme for topic documents.
 - Reference to the root-level `README.md`, `CONTRIBUTING.md`, and `AGENTS.md`, which remain outside
   `/docs` by design.
+
+## 2026-08-09
+
+### Added
+- Documentation for Linux native window decorations fix (removing custom GTK titlebar to show window icon in titlebar).
+- Added `gtk` and `gdk-pixbuf` dependencies for Linux window icon setup.

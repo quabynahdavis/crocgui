@@ -13,6 +13,9 @@ Revision history for documents in `docs/architecture/`.
   `src-tauri/tauri.conf.json`, the `decorations: true` and `transparent: false` settings, why the two
   are pinned together for Server-Side Decorations on KDE/GNOME, and the distinction between
   `productName` and the window `title`.
+- `02-backend.md`: new "Linux window icon" section documenting the GTK setup in `lib.rs` that sets
+  the window icon via `gtk::gdk_pixbuf::Pixbuf::from_file` and removes the custom GTK titlebar with
+  `set_titlebar(None)` to use native decorations.
 
 ### Changed
 - `01-frontend.md`: noted that the desktop nav no longer repeats the product name, since the native

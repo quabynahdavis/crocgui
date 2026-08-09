@@ -13,7 +13,7 @@ and receive them using croc's four-word code phrase — without ever touching a 
 | Aspect | Detail |
 | --- | --- |
 | Frontend | SvelteKit 2.9 (`adapter-static`, SPA), Svelte 5 runes, Vite, Tailwind CSS v4, shadcn-svelte, bits-ui |
-| Backend | Tauri 2 (Rust), `serde`/`serde_json`, `log` + `env_logger` |
+| Backend | Tauri 2 (Rust), `serde`/`serde_json`, `log` + `env_logger`, `gtk` + `gdk-pixbuf` (Linux) |
 | Package manager | Bun |
 | Transfer engine | The `croc` binary, bundled as a Tauri resource with a `PATH` fallback |
 | Tests | 55 Rust unit tests, 60 Svelte/Vitest tests |
