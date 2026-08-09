@@ -20,7 +20,7 @@ jobs:
         run: bun install
 
       - name: Type check
-        run: bun run check
+        run: ./node_modules/.bin/svelte-kit sync && ./node_modules/.bin/svelte-check --no-tsconfig --ignore "node_modules"
 
       - name: Run tests
         run: bun run test

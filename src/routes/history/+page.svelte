@@ -30,7 +30,7 @@
   // delete confirmation state
   let deleteTarget = $state<TransferRecord | null>(null);
   let deleting = $state(false);
-  let dialogRef: HTMLDivElement | null = null;
+  let dialogRef = $state<HTMLDivElement | null>(null);
 
   $effect(() => {
     if (deleteTarget && dialogRef) {
