@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import {
     ArrowLeft, Upload, Copy, Check, File, X, Folder,
     ClipboardList, StickyNote, Eye,
@@ -18,7 +19,6 @@
 
   let previewTarget = $state<SendItem | null>(null);
   let dragActive = $state(false);
-  let dragCounter = $state(0);
   let qrUrl = $state("");
 
   let copied = $state(false);
@@ -68,29 +68,20 @@
       }),
     );
 
-    // Tauri native file drop — provides full filesystem paths (unlike the
-    // browser's dataTransfer.files which only gives bare filenames).
-    unlisten.push(
-      await listen<string[]>("tauri://file-drop", (e) => {
-        for (const path of e.payload) {
+    const appWindow = getCurrentWebviewWindow();
+    const unlistenFileDrop = appWindow.onFileDropEvent((event) => {
+      if (event.payload.type === 'hover') {
+        dragActive = true;
+      } else if (event.payload.type === 'drop') {
+        for (const path of event.payload.paths) {
           sendState.items = [...sendState.items, { type: "file" as SendMode, path, label: labelFromPath(path) }];
         }
-      }),
-    );
-
-    // Show the drop overlay while files are hovering over the window.
-    unlisten.push(
-      await listen("tauri://file-drop-hover", () => {
-        dragActive = true;
-      }),
-    );
-
-    // Hide the overlay when the drag leaves or is cancelled.
-    unlisten.push(
-      await listen("tauri://file-drop-cancelled", () => {
         dragActive = false;
-      }),
-    );
+      } else {
+        dragActive = false;
+      }
+    });
+    unlisten.push(unlistenFileDrop);
   });
 
   onDestroy(() => {
@@ -122,32 +113,10 @@
     }
   }
 
-  function onDragEnter(e: DragEvent) {
-    e.preventDefault();
-    dragCounter++;
-    dragActive = true;
-  }
-
-  function onDragOver(e: DragEvent) {
-    e.preventDefault();
-  }
-
-  function onDragLeave(e: DragEvent) {
-    e.preventDefault();
-    dragCounter--;
-    if (dragCounter === 0) {
-      dragActive = false;
-    }
-  }
-
   function onDrop(e: DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    dragCounter = 0;
     dragActive = false;
-    // Note: actual file adding is done via the tauri://file-drop event listener
-    // in onMount, because browser File objects only provide filenames without
-    // directory paths. Tauri emits native file-drop events with full paths.
   }
 
   function addText() {
@@ -269,10 +238,6 @@
     class="relative"
     role="region"
     aria-label="File drop zone"
-    aria-dropeffect="copy"
-    ondragenter={onDragEnter}
-    ondragover={onDragOver}
-    ondragleave={onDragLeave}
     ondrop={onDrop}
   >
   <Card>
