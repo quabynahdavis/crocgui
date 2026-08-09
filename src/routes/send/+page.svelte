@@ -18,6 +18,7 @@
 
   let previewTarget = $state<SendItem | null>(null);
   let dragActive = $state(false);
+  let dragCounter = $state(0);
   let qrUrl = $state("");
 
   let copied = $state(false);
@@ -66,6 +67,30 @@
         sendState.transferring = false;
       }),
     );
+
+    // Tauri native file drop — provides full filesystem paths (unlike the
+    // browser's dataTransfer.files which only gives bare filenames).
+    unlisten.push(
+      await listen<string[]>("tauri://file-drop", (e) => {
+        for (const path of e.payload) {
+          sendState.items = [...sendState.items, { type: "file" as SendMode, path, label: labelFromPath(path) }];
+        }
+      }),
+    );
+
+    // Show the drop overlay while files are hovering over the window.
+    unlisten.push(
+      await listen("tauri://file-drop-hover", () => {
+        dragActive = true;
+      }),
+    );
+
+    // Hide the overlay when the drag leaves or is cancelled.
+    unlisten.push(
+      await listen("tauri://file-drop-cancelled", () => {
+        dragActive = false;
+      }),
+    );
   });
 
   onDestroy(() => {
@@ -97,24 +122,32 @@
     }
   }
 
+  function onDragEnter(e: DragEvent) {
+    e.preventDefault();
+    dragCounter++;
+    dragActive = true;
+  }
+
   function onDragOver(e: DragEvent) {
     e.preventDefault();
-    dragActive = true;
   }
 
   function onDragLeave(e: DragEvent) {
     e.preventDefault();
-    dragActive = false;
+    dragCounter--;
+    if (dragCounter === 0) {
+      dragActive = false;
+    }
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
     dragActive = false;
-    const files = e.dataTransfer?.files;
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      sendState.items = [...sendState.items, { type: "file" as SendMode, path: file.name, label: file.name, sizeBytes: file.size }];
-    }
+    // Note: actual file adding is done via the tauri://file-drop event listener
+    // in onMount, because browser File objects only provide filenames without
+    // directory paths. Tauri emits native file-drop events with full paths.
   }
 
   function addText() {
@@ -237,13 +270,17 @@
     role="region"
     aria-label="File drop zone"
     aria-dropeffect="copy"
+    ondragenter={onDragEnter}
     ondragover={onDragOver}
     ondragleave={onDragLeave}
     ondrop={onDrop}
   >
   <Card>
     <CardHeader>
-      <CardTitle>Send Files</CardTitle>
+      <CardTitle class="flex items-center justify-center gap-2">
+        <img src="/crocodile-128.png" alt="" class="h-7 w-7 opacity-80" />
+        Send Files
+      </CardTitle>
       <CardDescription>Select files, a folder, or share text</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
