@@ -44,6 +44,23 @@ server: {
 watcher so Cargo artifacts do not trigger frontend reloads. Setting the `TAURI_DEV_HOST` environment
 variable exposes the server on your LAN address and switches HMR to a WebSocket on port 1421.
 
+### Window chrome in dev
+
+Under `bun run tauri dev` the window is framed by your desktop environment, not by the app. The
+titlebar reads **Croc** and the minimise/maximise/close buttons follow your system theme, because
+`src-tauri/tauri.conf.json` sets `"decorations": true` and `"transparent": false`.
+
+Two consequences for day-to-day work:
+
+- Changing `title`, `decorations`, or any other value under `app.windows` requires a **restart** of
+  `tauri dev`. These are read once at window creation, so Vite HMR will not pick them up.
+- Under `bun run dev` alone the page renders in a normal browser tab with no titlebar at all. That is
+  expected — do not add a custom titlebar to compensate, as it would double up inside the real app.
+
+Never introduce `data-tauri-drag-region`, custom window-control buttons, or
+`@tauri-apps/api/window` calls into the layout. The native frame already provides dragging and window
+controls; see [`../architecture/01-frontend.md`](../architecture/01-frontend.md).
+
 ## Project structure
 
 ```

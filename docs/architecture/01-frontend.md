@@ -46,6 +46,53 @@ unlistenNavigate = await listen<string>("navigate", (e) => {
 That single subscription is what allows the system tray's *Send Files*, *Receive Files*, and
 *Settings* items to change route. The listener is torn down in `onDestroy`.
 
+## Window chrome
+
+The application uses **native OS window decorations**. The titlebar, close/minimise/maximise buttons,
+window dragging, and resize handles are all provided by the desktop environment — not by the webview.
+On Linux this means Server-Side Decorations (SSD) drawn by KDE or GNOME; on Windows and macOS it is
+the standard system frame. The configuration that enables this lives in
+`src-tauri/tauri.conf.json` and is described in [`02-backend.md`](02-backend.md).
+
+Because the OS owns the chrome, the frontend deliberately contains **none** of the pieces a custom
+titlebar would require:
+
+| Absent by design | Why |
+| --- | --- |
+| `data-tauri-drag-region` attributes | The native titlebar already handles window dragging |
+| Custom minimise / maximise / close buttons | Provided by the window manager |
+| `@tauri-apps/api/window` imports | No programmatic window control is needed from the UI |
+| `transparent` window backgrounds or rounded-corner hacks | The window is opaque and framed by the compositor |
+
+If any of the above is reintroduced, the result on Linux is a doubled titlebar — one drawn by the
+compositor and one by the webview — so treat their absence as an invariant.
+
+### Layout consequences
+
+`src/routes/+layout.svelte` starts directly with application navigation; there is no chrome row above
+it. The desktop top bar carries only the home link icon, the centred route links, and the theme
+toggle. The product name is **not** repeated in the nav, because the native titlebar already displays
+the window title:
+
+```svelte
+<!-- Desktop top nav -->
+<nav class="sticky top-0 z-50 hidden border-b bg-background/80 backdrop-blur-sm sm:block" aria-label="Main navigation">
+  <div class="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4 md:gap-6 md:px-6">
+    <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+      <Send class="h-5 w-5 text-primary" />
+    </a>
+    <!-- route links -->
+  </div>
+</nav>
+```
+
+The `sticky top-0` positioning is measured from the top of the *webview viewport*, which sits below
+the native titlebar, so the nav still pins correctly. Nothing in the layout needs to reserve vertical
+space for window controls, and the mobile bottom navigation is unaffected.
+
+This mirrors the approach taken by applications such as *Handy* — lean on the platform frame — rather
+than the fully custom webview titlebar used by *OpenTubeX*.
+
 ## State management
 
 State is expressed with Svelte 5 runes. There are three distinct tiers.

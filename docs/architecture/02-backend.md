@@ -60,6 +60,41 @@ into a client-side route change. `quit` calls `app.exit(0)`.
 A left click on the tray icon toggles window visibility: hidden if currently visible, shown and
 focused otherwise.
 
+### Window configuration
+
+The main window is declared in `src-tauri/tauri.conf.json` under `app.windows[0]`:
+
+```json
+{
+  "title": "Croc",
+  "width": 800,
+  "height": 600,
+  "minWidth": 360,
+  "minHeight": 480,
+  "resizable": true,
+  "fullscreen": false,
+  "decorations": true,
+  "transparent": false
+}
+```
+
+| Field | Value | Effect |
+| --- | --- | --- |
+| `title` | `"Croc"` | Text shown in the native titlebar, taskbar, and window switcher |
+| `decorations` | `true` | The OS draws the titlebar, window controls, and resize borders |
+| `transparent` | `false` | The window surface is opaque, which is what lets a compositor attach Server-Side Decorations |
+
+`decorations: true` is the default in Tauri, but it is set explicitly together with
+`transparent: false` because the two interact on Linux. A transparent window causes GTK to fall back
+to Client-Side Decorations (CSD) — or, under KDE/GNOME configurations that expect SSD, to no frame at
+all. Pinning both values guarantees a consistent, correctly framed window across KDE Plasma, GNOME,
+and tiling window managers, and avoids a webview that renders edge-to-edge with no way to move or
+close it.
+
+Note that `productName` remains `croc-gui` — it drives the binary name, bundle identifiers, and the
+tray menu label — while `title` is purely the user-facing window caption. The frontend draws no
+titlebar of its own; see [`01-frontend.md`](01-frontend.md).
+
 ### Close-to-tray
 
 A desktop-only window event handler intercepts `CloseRequested`:

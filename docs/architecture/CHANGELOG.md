@@ -2,6 +2,22 @@
 
 Revision history for documents in `docs/architecture/`.
 
+## 2026-08-09
+
+### Added
+- `01-frontend.md`: new "Window chrome" section documenting the use of native OS window decorations,
+  the elements the frontend deliberately omits (`data-tauri-drag-region`, custom window controls,
+  `@tauri-apps/api/window` imports, transparent backgrounds), and the resulting layout consequences
+  for `src/routes/+layout.svelte`.
+- `02-backend.md`: new "Window configuration" section documenting the `app.windows[0]` block in
+  `src-tauri/tauri.conf.json`, the `decorations: true` and `transparent: false` settings, why the two
+  are pinned together for Server-Side Decorations on KDE/GNOME, and the distinction between
+  `productName` and the window `title`.
+
+### Changed
+- `01-frontend.md`: noted that the desktop nav no longer repeats the product name, since the native
+  titlebar displays the window title.
+
 ## 2026-08-08
 
 ### Added

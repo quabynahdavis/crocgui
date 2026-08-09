@@ -2,6 +2,13 @@
 
 Revision history for documents in `docs/getting-started/`.
 
+## 2026-08-09
+
+### Added
+- `02-development.md`: new "Window chrome in dev" section covering the native titlebar shown by
+  `tauri dev`, the `Croc` window title, the need to restart after editing `app.windows` values, the
+  absence of a titlebar in browser-only `bun run dev`, and the prohibition on custom window controls.
+
 ## 2026-08-08
 
 ### Added
